@@ -3,6 +3,10 @@ engine/tracking.py
 
 MediaPipe hand-tracking wrapper shared by every HandArcade game.
 
+Migrated to the MediaPipe Tasks API (HandLandmarker), since the legacy
+`mp.solutions.hands` API was removed in recent mediapipe releases.
+Public interface is unchanged from the old version.
+
 Usage:
     from engine.tracking import HandTracker
 
@@ -18,30 +22,83 @@ Usage:
 """
 
 import math
+import os
 
+import cv2
 import mediapipe as mp
+from mediapipe.tasks import python as mp_python
+from mediapipe.tasks.python import vision as mp_vision
 
-mp_hands = mp.solutions.hands
-mp_drawing = mp.solutions.drawing_utils
-mp_drawing_styles = mp.solutions.drawing_styles
+# Model file downloaded once via:
+#   wget -O engine/models/hand_landmarker.task \
+#     https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
+_DEFAULT_MODEL_PATH = os.path.join(
+    os.path.dirname(__file__), "models", "hand_landmarker.task"
+)
 
-# Landmark indices we care about (see MediaPipe Hands landmark map)
-INDEX_FINGER_TIP = mp_hands.HandLandmark.INDEX_FINGER_TIP
-THUMB_TIP = mp_hands.HandLandmark.THUMB_TIP
-WRIST = mp_hands.HandLandmark.WRIST
-MIDDLE_FINGER_MCP = mp_hands.HandLandmark.MIDDLE_FINGER_MCP
+# Landmark indices (standard 21-point hand topology, unchanged from the
+# legacy API's mp_hands.HandLandmark enum values).
+WRIST = 0
+THUMB_TIP = 4
+INDEX_FINGER_MCP = 5
+INDEX_FINGER_PIP = 6
+INDEX_FINGER_TIP = 8
+MIDDLE_FINGER_MCP = 9
+MIDDLE_FINGER_PIP = 10
+MIDDLE_FINGER_TIP = 12
+RING_FINGER_PIP = 14
+RING_FINGER_TIP = 16
+PINKY_PIP = 18
+PINKY_TIP = 20
 
 # Fingertip / PIP joint pairs used to decide if a finger is "curled"
 _FINGER_TIP_PIP_PAIRS = [
-    (mp_hands.HandLandmark.INDEX_FINGER_TIP, mp_hands.HandLandmark.INDEX_FINGER_PIP),
-    (mp_hands.HandLandmark.MIDDLE_FINGER_TIP, mp_hands.HandLandmark.MIDDLE_FINGER_PIP),
-    (mp_hands.HandLandmark.RING_FINGER_TIP, mp_hands.HandLandmark.RING_FINGER_PIP),
-    (mp_hands.HandLandmark.PINKY_TIP, mp_hands.HandLandmark.PINKY_PIP),
+    (INDEX_FINGER_TIP, INDEX_FINGER_PIP),
+    (MIDDLE_FINGER_TIP, MIDDLE_FINGER_PIP),
+    (RING_FINGER_TIP, RING_FINGER_PIP),
+    (PINKY_TIP, PINKY_PIP),
 ]
 
 
+class _HandLandmarksProxy:
+    """Mimics the old NormalizedLandmarkList: exposes `.landmark` as a list of points."""
+
+    __slots__ = ("landmark",)
+
+    def __init__(self, landmark_list):
+        self.landmark = landmark_list
+
+
+class _HandednessProxy:
+    """Mimics the old `multi_handedness[i].classification[0].label/.score` shape."""
+
+    class _Classification:
+        __slots__ = ("label", "score")
+
+        def __init__(self, category):
+            self.label = category.category_name
+            self.score = category.score
+
+    __slots__ = ("classification",)
+
+    def __init__(self, categories):
+        self.classification = [self._Classification(c) for c in categories]
+
+
+class _ResultsProxy:
+    """Mimics the old `results` object returned by mp.solutions.hands.Hands.process()."""
+
+    __slots__ = ("multi_hand_landmarks", "multi_handedness")
+
+    def __init__(self, task_result):
+        hands = [_HandLandmarksProxy(h) for h in task_result.hand_landmarks]
+        handed = [_HandednessProxy(h) for h in task_result.handedness]
+        self.multi_hand_landmarks = hands or None
+        self.multi_handedness = handed or None
+
+
 class HandTracker:
-    """Thin wrapper around mp.solutions.hands.Hands with sane defaults."""
+    """Thin wrapper around mp.tasks.vision.HandLandmarker with the old Hands()-like interface."""
 
     def __init__(
         self,
@@ -49,37 +106,68 @@ class HandTracker:
         min_detection_confidence=0.7,
         min_tracking_confidence=0.5,
         static_image_mode=False,
+        model_path=_DEFAULT_MODEL_PATH,
     ):
-        self._hands = mp_hands.Hands(
-            static_image_mode=static_image_mode,
-            max_num_hands=max_num_hands,
-            min_detection_confidence=min_detection_confidence,
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(
+                f"Hand landmark model not found at {model_path}. "
+                "Download it with:\n"
+                "  wget -O engine/models/hand_landmarker.task "
+                "https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
+                "hand_landmarker/float16/1/hand_landmarker.task"
+            )
+
+        self._static_image_mode = static_image_mode
+        running_mode = (
+            mp_vision.RunningMode.IMAGE if static_image_mode else mp_vision.RunningMode.VIDEO
+        )
+
+        options = mp_vision.HandLandmarkerOptions(
+            base_options=mp_python.BaseOptions(model_asset_path=model_path),
+            running_mode=running_mode,
+            num_hands=max_num_hands,
+            min_hand_detection_confidence=min_detection_confidence,
+            min_hand_presence_confidence=min_detection_confidence,
             min_tracking_confidence=min_tracking_confidence,
         )
+        self._landmarker = mp_vision.HandLandmarker.create_from_options(options)
+        self._frame_count = 0
 
     def process(self, frame_bgr):
         """
         Run hand detection on a BGR frame (as read by cv2.VideoCapture).
-        Returns the raw MediaPipe results object
-        (has .multi_hand_landmarks and .multi_handedness).
+        Returns a proxy object with .multi_hand_landmarks and .multi_handedness,
+        matching the old mp.solutions.hands results shape.
         """
-        rgb = frame_bgr[:, :, ::-1]  # BGR -> RGB without an extra cvtColor call
-        rgb.flags.writeable = False
-        results = self._hands.process(rgb)
-        return results
+        rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+
+        if self._static_image_mode:
+            result = self._landmarker.detect(mp_image)
+        else:
+            self._frame_count += 1  # just needs to be monotonically increasing
+            result = self._landmarker.detect_for_video(mp_image, self._frame_count)
+
+        return _ResultsProxy(result)
 
     def draw_landmarks(self, frame_bgr, hand_landmarks):
-        """Draw MediaPipe's default landmark + connection overlay onto frame_bgr in place."""
-        mp_drawing.draw_landmarks(
-            frame_bgr,
-            hand_landmarks,
-            mp_hands.HAND_CONNECTIONS,
-            mp_drawing_styles.get_default_hand_landmarks_style(),
-            mp_drawing_styles.get_default_hand_connections_style(),
-        )
+        """Draw hand landmark points + connections onto frame_bgr in place."""
+        h, w = frame_bgr.shape[:2]
+        connections = mp_vision.HandLandmarksConnections.HAND_CONNECTIONS
+
+        for connection in connections:
+            start = hand_landmarks.landmark[connection.start]
+            end = hand_landmarks.landmark[connection.end]
+            x1, y1 = int(start.x * w), int(start.y * h)
+            x2, y2 = int(end.x * w), int(end.y * h)
+            cv2.line(frame_bgr, (x1, y1), (x2, y2), (255, 255, 255), 2)
+
+        for lm in hand_landmarks.landmark:
+            x, y = int(lm.x * w), int(lm.y * h)
+            cv2.circle(frame_bgr, (x, y), 4, (0, 220, 0), -1)
 
     def close(self):
-        self._hands.close()
+        self._landmarker.close()
 
     def __enter__(self):
         return self
@@ -145,8 +233,6 @@ def is_fist_closed(hand_landmarks, curl_threshold=0.07):
         dist_wrist_tip = math.hypot(tip.x - wrist.x, tip.y - wrist.y)
         dist_wrist_pip = math.hypot(pip.x - wrist.x, pip.y - wrist.y)
 
-        # A curled finger's tip is close to (or closer than) its own PIP joint,
-        # rather than extended well beyond it.
         if dist_wrist_tip <= dist_wrist_pip + curl_threshold:
             curled_count += 1
 
