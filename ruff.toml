@@ -1,0 +1,11 @@
+# Keep line length reasonable but not overly strict for a small game project
+line-length = 100
+
+[lint]
+# Rule sets: pyflakes (errors/unused imports), pycodestyle, isort (import order),
+# bugbear (common bug patterns), and simplify (readability suggestions)
+select = ["E", "F", "I", "B", "SIM"]
+ignore = []
+
+[format]
+quote-style = "double"
