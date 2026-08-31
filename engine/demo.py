@@ -15,8 +15,8 @@ from engine.tracking import (
     HandTracker,
     get_fingertip_position,
     get_palm_center,
-    is_fist_closed,
     get_pinch_distance,
+    is_fist_closed,
 )
 
 
