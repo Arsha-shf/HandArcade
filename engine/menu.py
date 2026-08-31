@@ -21,9 +21,9 @@ Contract each game's run_xxx() must follow:
 import cv2
 
 from engine.tracking import HandTracker
-from games.fruit_slice import run_fruit_slice
-from games.dodge import run_dodge
 from games.catch import run_catch
+from games.dodge import run_dodge
+from games.fruit_slice import run_fruit_slice
 from games.pinch_pop import run_pinch_pop
 
 # Ordered so list index + 1 == the number key that launches it (1-4)
