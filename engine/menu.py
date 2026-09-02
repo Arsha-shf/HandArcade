@@ -7,6 +7,11 @@ Opens the webcam and HandTracker ONCE here, then shares them with whichever
 game is launched, so we don't reopen the camera every time the player
 bounces between the menu and a game.
 
+Camera is opened via engine.camera.open_camera(), which grabs the highest
+resolution the device actually supports, and the window is fullscreen +
+letterboxed via engine.camera.show() -- see engine/camera.py for why
+those two are handled together instead of with a plain cv2.imshow().
+
 Controls on the menu:
     1-4  -> launch that game
     q    -> quit the app
@@ -16,10 +21,14 @@ Contract each game's run_xxx() must follow:
         - Runs its own loop, reading frames from `cap` and using `tracker`.
         - Return "quit" to exit the whole app.
         - Return anything else (e.g. "menu" or None) to go back to the menu.
+        - Should display via engine.camera.show(WINDOW_NAME, frame), not
+          cv2.imshow directly, or it won't get the fullscreen/letterbox
+          treatment set up here.
 """
 
 import cv2
 
+from engine.camera import init_fullscreen_window, open_camera, show
 from engine.tracking import HandTracker
 from games.catch import run_catch
 from games.dodge import run_dodge
@@ -64,7 +73,7 @@ def _show_menu_loop(cap):
 
         frame = cv2.flip(frame, 1)
         _draw_menu(frame)
-        cv2.imshow(WINDOW_NAME, frame)
+        show(WINDOW_NAME, frame)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
@@ -75,10 +84,12 @@ def _show_menu_loop(cap):
 
 def run_menu():
     """Entry point: loop between the menu and games until the user quits."""
-    cap = cv2.VideoCapture(0)
+    cap = open_camera()
     if not cap.isOpened():
         print("Could not open webcam. Check your camera permissions.")
         return
+
+    init_fullscreen_window(WINDOW_NAME)
 
     print("HandArcade menu running. Press 1-4 to play, 'q' to quit.")
 
