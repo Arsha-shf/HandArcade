@@ -15,6 +15,7 @@ collision.py, difficulty.py, hud.py.
 
 import cv2
 
+from engine.camera import show
 from .config import WINDOW_NAME
 from .player import make_player_state, update_player, draw_player
 from .obstacles import spawn_obstacle, update_obstacles, draw_obstacle
@@ -75,7 +76,7 @@ def run_dodge(cap, tracker):
         if not alive:
             draw_game_over(frame, score, game_over_message)
 
-        cv2.imshow(WINDOW_NAME, frame)
+        show(WINDOW_NAME, frame)
 
         key = cv2.waitKey(1) & 0xFF
         if key == 27:  # ESC

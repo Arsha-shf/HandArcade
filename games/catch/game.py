@@ -14,6 +14,7 @@ import math
 
 import cv2
 
+from engine.camera import show
 from engine.tracking import get_palm_center
 
 from .hud import draw_catch_flash, draw_game_over, draw_hud
@@ -116,7 +117,7 @@ def run_catch(cap, tracker):
                 obj.draw(frame)
             draw_game_over(frame, score)
 
-        cv2.imshow(WINDOW_NAME, frame)
+        show(WINDOW_NAME, frame)
 
         key = cv2.waitKey(1) & 0xFF
         if key == 27:  # ESC
