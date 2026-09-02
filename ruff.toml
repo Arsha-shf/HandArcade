@@ -1,5 +1,5 @@
 # Keep line length reasonable but not overly strict for a small game project
-line-length = 100
+line-length = 150
 
 [lint]
 # Rule sets: pyflakes (errors/unused imports), pycodestyle, isort (import order),

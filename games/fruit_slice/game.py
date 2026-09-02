@@ -15,6 +15,7 @@ import time
 
 import cv2
 
+from engine.camera import show
 from engine.tracking import get_fingertip_position
 
 from .hud import draw_game_over, draw_hud
@@ -79,7 +80,7 @@ def run_fruit_slice(cap, tracker):
         else:
             draw_hud(frame, score, misses, MAX_MISSES)
 
-        cv2.imshow(WINDOW_NAME, frame)
+        show(WINDOW_NAME, frame)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):

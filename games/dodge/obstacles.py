@@ -11,7 +11,7 @@ import random
 import cv2
 import numpy as np
 
-from .config import OBSTACLE_SHAPES, OBSTACLE_COLORS
+from .config import OBSTACLE_COLORS, OBSTACLE_SHAPES
 
 
 def spawn_obstacle(frame_w, speed):

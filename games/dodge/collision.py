@@ -4,7 +4,7 @@ games/dodge/collision.py
 One job: is the player touching an obstacle right now.
 """
 
-from .config import PLAYER_RADIUS, HITBOX_FORGIVENESS
+from .config import HITBOX_FORGIVENESS, PLAYER_RADIUS
 
 
 def check_collision(player, obstacles):

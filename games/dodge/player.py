@@ -9,10 +9,10 @@ instead of rewritten.
 
 import cv2
 
-from engine.tracking import get_palm_center
 from engine.head_tracking import SmoothedValue
+from engine.tracking import get_palm_center
 
-from .config import PLAYER_RADIUS, PLAYER_Y_OFFSET_FROM_BOTTOM, PLAYER_SMOOTHING_ALPHA
+from .config import PLAYER_RADIUS, PLAYER_SMOOTHING_ALPHA, PLAYER_Y_OFFSET_FROM_BOTTOM
 
 
 def make_player_state(frame_w, frame_h):
