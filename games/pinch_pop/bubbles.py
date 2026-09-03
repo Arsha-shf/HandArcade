@@ -185,7 +185,7 @@ class BubbleManager:
         return max(0.4, 1.1 - elapsed * 0.015)
 
     def _pick_kind(self):
-        kinds, weights = zip(*_KIND_WEIGHTS.items())
+        kinds, weights = zip(*_KIND_WEIGHTS.items(), strict=True)
         return random.choices(kinds, weights=weights, k=1)[0]
 
     def _spawn(self, frame_w, frame_h):
