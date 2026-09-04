@@ -14,6 +14,7 @@ import math
 
 import cv2
 
+from engine.audio import play_sound
 from engine.camera import show
 from engine.tracking import get_palm_center
 
@@ -25,6 +26,9 @@ WINDOW_NAME = "HandArcade"
 MAX_MISSES = 5
 PALM_CATCH_RADIUS = 55     # px. The hand's effective "paw" -- tune per camera FOV/resolution
 FLASH_FRAMES = 18          # how long a "+N" popup lingers, in frames
+
+SOUND_CATCH_GOOD = "assets/sounds/pop.wav"
+SOUND_CATCH_BAD = "assets/sounds/hit.wav"
 
 
 class _State:
@@ -90,8 +94,10 @@ def run_catch(cap, tracker):
                         if obj.obj_type.is_bad:
                             combo = 0
                             misses += 1  # catching a bomb counts as a miss
+                            play_sound(SOUND_CATCH_BAD)
                         else:
                             combo += 1
+                            play_sound(SOUND_CATCH_GOOD)
                         flashes.append([obj.x, obj.y, obj.obj_type.points, FLASH_FRAMES])
                         break
 

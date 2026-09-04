@@ -28,7 +28,9 @@ Contract each game's run_xxx() must follow:
 
 import cv2
 
+from engine.audio import init_audio
 from engine.camera import init_fullscreen_window, open_camera, show
+from engine.transitions import fade_in, fade_out
 from engine.tracking import HandTracker
 from games.catch import run_catch
 from games.dodge import run_dodge
@@ -90,6 +92,7 @@ def run_menu():
         return
 
     init_fullscreen_window(WINDOW_NAME)
+    init_audio()
 
     print("HandArcade menu running. Press 1-4 to play, 'q' to quit.")
 
@@ -102,7 +105,11 @@ def run_menu():
 
                 name, run_game = GAMES[choice]
                 print(f"Launching {name}...")
+
+                fade_out(cap, WINDOW_NAME)
                 result = run_game(cap, tracker)
+                fade_in(cap, WINDOW_NAME)
+
                 if result == "quit":
                     break
                 # any other return value (e.g. "menu"/None) just loops back
