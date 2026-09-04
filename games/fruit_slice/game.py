@@ -15,6 +15,7 @@ import time
 
 import cv2
 
+from engine.audio import play_sound
 from engine.camera import show
 from engine.tracking import get_fingertip_position
 
@@ -25,6 +26,9 @@ WINDOW_NAME = "HandArcade"
 
 MAX_MISSES = 3
 TRAIL_LEN = 6  # fingertip positions kept for swipe-through-slice detection
+
+SOUND_SLICE = "assets/sounds/slice.wav"
+SOUND_BOMB = "assets/sounds/hit.wav"
 
 
 def run_fruit_slice(cap, tracker):
@@ -130,8 +134,10 @@ def _advance_round(dt, now, start_time, frame_w, frame_h, fingertip, trail,
             fruit.slice()
             if fruit.is_bomb:
                 misses += 1  # slicing a bomb costs one life, same as a missed fruit
+                play_sound(SOUND_BOMB)
             else:
                 score += fruit.points
+                play_sound(SOUND_SLICE)
 
         if fruit.offscreen_bottom_uncollected() and not fruit.is_bomb:
             fruit.alive = False  # falls off the bottom with no penalty
