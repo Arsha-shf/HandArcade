@@ -262,7 +262,6 @@ def _draw_flashes(frame, flashes):
 def _make_particles(pos, color, count=PARTICLES_PER_SLICE):
     particles = []
     for _ in range(count):
-        angle = random.uniform(0, 2 * 3.14159)
         speed = random.uniform(80, 260)
         vx = speed * random.uniform(-1, 1)
         vy = -abs(speed * random.uniform(0.3, 1.0))

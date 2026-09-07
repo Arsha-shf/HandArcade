@@ -47,10 +47,7 @@ def spawn_fruit(frame_w, frame_h, difficulty="medium"):
     cfg = _config(difficulty)
     speed_mult = cfg["speed_mult"]
 
-    if random.random() < cfg["side_spawn_chance"]:
-        edge = random.choice(["left", "right"])
-    else:
-        edge = "bottom"
+    edge = random.choice(["left", "right"]) if random.random() < cfg["side_spawn_chance"] else "bottom"
 
     if edge == "bottom":
         x = random.uniform(frame_w * 0.15, frame_w * 0.85)
