@@ -30,8 +30,8 @@ import cv2
 
 from engine.audio import init_audio
 from engine.camera import init_fullscreen_window, open_camera, show
-from engine.transitions import fade_in, fade_out
 from engine.tracking import HandTracker
+from engine.transitions import fade_in, fade_out
 from games.catch import run_catch
 from games.dodge import run_dodge
 from games.fruit_slice import run_fruit_slice
