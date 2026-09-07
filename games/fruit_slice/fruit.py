@@ -16,7 +16,6 @@ from engine.sprites import draw_sprite, get_sprite_size
 
 ASSET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets")
 
-# (sprite filename, fallback color BGR, points, fallback radius px)
 FRUIT_TYPES = [
     ("apple.png", (60, 60, 220), 10, 45),
     ("orange.png", (0, 150, 255), 10, 45),
@@ -29,7 +28,7 @@ BOMB_COLOR = (40, 40, 40)
 BOMB_RADIUS = 45
 BOMB_CHANCE = 0.15
 
-GRAVITY = 900.0  # px/s^2
+GRAVITY = 900.0
 
 _missing_sprite_warned = set()
 
@@ -62,11 +61,12 @@ def _sprite_radius(filename, scale, fallback_radius):
 class Fruit:
     """A single falling fruit (or bomb) with simple projectile physics."""
 
-    def __init__(self, x, y, vx, vy, frame_w, frame_h):
+    def __init__(self, x, y, vx, vy, frame_w, frame_h, bomb_chance=None):
         self.frame_w = frame_w
         self.frame_h = frame_h
 
-        self.is_bomb = random.random() < BOMB_CHANCE
+        chance = BOMB_CHANCE if bomb_chance is None else bomb_chance
+        self.is_bomb = random.random() < chance
         if self.is_bomb:
             self.sprite = BOMB_SPRITE
             self.color = BOMB_COLOR
@@ -81,11 +81,13 @@ class Fruit:
         self.vy = vy
         self.scale = random.uniform(0.85, 1.2)
         self.angle = random.uniform(0, 360)
-        self.spin_speed = random.uniform(-120, 120)  # deg/sec, purely visual
+        self.spin_speed = random.uniform(-120, 120)
 
         self.sliced = False
         self.slice_time = None
-        self.alive = True  # False once it should be removed from the list
+        self.alive = True
+
+        self.juice_color = self.color
 
         self.radius = _sprite_radius(self.sprite, self.scale, self.fallback_radius)
 
@@ -96,13 +98,12 @@ class Fruit:
         self.angle = (self.angle + self.spin_speed * dt) % 360
 
         if self.sliced:
-            # sliced fruit keeps falling briefly (with a bit more "pop") then disappears
             if time.time() - self.slice_time > 0.35:
                 self.alive = False
             return
 
         if self.y - self.radius > self.frame_h:
-            self.alive = False  # fell off the bottom
+            self.alive = False
 
     def offscreen_bottom_uncollected(self):
         """True the single frame it falls past the bottom without being sliced."""
@@ -126,14 +127,12 @@ class Fruit:
     def slice(self):
         self.sliced = True
         self.slice_time = time.time()
-        # give the two "halves" a little outward kick for a nicer pop
         self.vx += random.uniform(-80, 80)
         self.vy -= 120
 
     def draw(self, frame):
         scale = self.scale
         if self.sliced:
-            # cheap slice effect: draw two offset halves fading via extra spin
             elapsed = time.time() - self.slice_time
             offset = elapsed * 160
             _draw_fruit_sprite(frame, self.sprite, self.x - offset, self.y, scale * 0.5,
