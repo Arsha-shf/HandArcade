@@ -7,7 +7,7 @@ On-screen score/lives display and the game-over overlay.
 import cv2
 
 
-def draw_hud(frame, score, misses, max_misses):
+def draw_hud(frame, score, misses, max_misses, fps=None, difficulty=None):
     h, w = frame.shape[:2]
     cv2.putText(frame, f"Score: {score}", (20, 40),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
@@ -15,6 +15,14 @@ def draw_hud(frame, score, misses, max_misses):
     life_text = "Lives: " + " ".join("X" for _ in range(max_misses - misses))
     cv2.putText(frame, life_text if life_text.strip() != "Lives:" else "Lives:",
                 (w - 260, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (100, 100, 255), 2)
+
+    if fps is not None:
+        cv2.putText(frame, f"FPS: {fps:.0f}", (20, 70),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
+
+    if difficulty is not None:
+        cv2.putText(frame, difficulty.upper(), (w - 260, 70),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 0), 1)
 
     cv2.putText(frame, "ESC = menu    q = quit", (20, h - 20),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1)
@@ -39,4 +47,4 @@ def draw_game_over(frame, score):
     hint = "Press any key for menu, q to quit"
     (hw, hh), _ = cv2.getTextSize(hint, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 1)
     cv2.putText(frame, hint, ((w - hw) // 2, h // 2 + 60),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (180, 180, 180), 1)      
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (180, 180, 180), 1)
