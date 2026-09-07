@@ -3,6 +3,7 @@ import time
 
 import cv2
 
+from engine.audio import play_sound
 from engine.camera import show
 from engine.tracking import (
     INDEX_FINGER_TIP,
@@ -20,6 +21,9 @@ WINDOW_NAME = "HandArcade"
 ROUND_SECONDS = 60
 READY_SECONDS = 3
 PINCH_THRESHOLD = 0.06
+
+SOUND_POP = "assets/sounds/pop.wav"
+SOUND_BOMB = "assets/sounds/hit.wav"
 
 _FLAVOR_WORDS = {
     "normal": ["Pop!", "Bop!", "Blip!"],
@@ -131,6 +135,7 @@ def run_pinch_pop(cap, tracker):
                         hud.spawn_popup(popups, text, point[0], point[1],
                                          color=color, scale=scale)
                         score_pulse = 8
+                        play_sound(SOUND_BOMB if popped.kind == "bomb" else SOUND_POP)
                 pinch_prev[label] = pinched
 
             bubble_mgr.draw(frame)

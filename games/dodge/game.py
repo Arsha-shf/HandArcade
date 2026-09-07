@@ -15,6 +15,7 @@ collision.py, difficulty.py, hud.py.
 
 import cv2
 
+from engine.audio import play_sound
 from engine.camera import show
 
 from .collision import check_collision
@@ -23,6 +24,8 @@ from .difficulty import get_difficulty
 from .hud import draw_game_over, draw_hud, pick_game_over_line
 from .obstacles import draw_obstacle, spawn_obstacle, update_obstacles
 from .player import draw_player, make_player_state, update_player
+
+SOUND_HIT = "assets/sounds/hit.wav"
 
 
 def run_dodge(cap, tracker):
@@ -68,6 +71,7 @@ def run_dodge(cap, tracker):
             if check_collision(player, obstacles):
                 alive = False
                 game_over_message = pick_game_over_line()
+                play_sound(SOUND_HIT)
 
         for obs in obstacles:
             draw_obstacle(frame, obs)
