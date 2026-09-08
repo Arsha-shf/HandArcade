@@ -1,35 +1,58 @@
-"""
-games/dodge/config.py
-
-All tunable numbers for Dodge in one place. Change feel/difficulty here,
-not by hunting through logic files.
-"""
-
 WINDOW_NAME = "HandArcade"
 
-# --- Player ---
-PLAYER_RADIUS = 30
-PLAYER_Y_OFFSET_FROM_BOTTOM = 90
-PLAYER_SMOOTHING_ALPHA = 0.35        # higher = snappier, lower = floatier
-HITBOX_FORGIVENESS = 0.78            # < 1.0 = shrink collision so it feels fair
+PLAYER_RADIUS_MIN = 22
+PLAYER_RADIUS_MAX = 42
+PLAYER_Y_MARGIN_TOP = 70
+PLAYER_Y_MARGIN_BOTTOM = 40
+PLAYER_SMOOTHING_ALPHA = 0.5
+HITBOX_FORGIVENESS = 0.78
 
-# --- Obstacles ---
-OBSTACLE_SPAWN_INTERVAL_START = 45   # frames between spawns at game start
-OBSTACLE_SPAWN_INTERVAL_MIN = 14     # never spawn faster than this
-OBSTACLE_SPEED_START = 6
-OBSTACLE_SPEED_MAX = 22
+HAND_SPAN_MIN = 60
+HAND_SPAN_MAX = 260
+
+Z_DODGE_THRESHOLD = 0.38
+
+OBSTACLE_RADIUS_MIN = 12
+OBSTACLE_RADIUS_MAX = 55
 OBSTACLE_SHAPES = ["circle", "square", "triangle"]
 OBSTACLE_COLORS = [
-    (60, 60, 230),   # red
-    (60, 200, 230),  # orange-yellow
-    (230, 120, 60),  # blue-ish
-    (180, 60, 200),  # purple
+    (60, 60, 230),
+    (60, 200, 230),
+    (230, 120, 60),
+    (180, 60, 200),
 ]
+OBSTACLE_EDGE_MARGIN = 10
+OBSTACLE_ANGLE_SPREAD_DEG = 35
 
-# --- Difficulty ramp ---
-DIFFICULTY_RAMP_EVERY_FRAMES = 240   # every ~8s at 30fps, things get worse
+DIFFICULTY_RAMP_EVERY_FRAMES = 210
 
-# --- Game over lines ---
+DIFFICULTY_PRESETS = {
+    "easy": {
+        "spawn_interval_start": 55,
+        "spawn_interval_min": 24,
+        "spawn_ramp_step": 2,
+        "speed_start": 7,
+        "speed_max": 20,
+        "speed_ramp_step": 1,
+    },
+    "mid": {
+        "spawn_interval_start": 38,
+        "spawn_interval_min": 14,
+        "spawn_ramp_step": 3,
+        "speed_start": 10,
+        "speed_max": 28,
+        "speed_ramp_step": 2,
+    },
+    "hard": {
+        "spawn_interval_start": 24,
+        "spawn_interval_min": 8,
+        "spawn_ramp_step": 4,
+        "speed_start": 14,
+        "speed_max": 38,
+        "speed_ramp_step": 3,
+    },
+}
+
 GAME_OVER_LINES = [
     "RIP. You dodged like a rock.",
     "Skill issue detected.",
