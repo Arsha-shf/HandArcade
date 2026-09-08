@@ -41,25 +41,43 @@ def _spawn_edge_and_velocity(frame_w, frame_h, radius, speed):
     return x, y, vx, vy
 
 
-def spawn_obstacle(frame_w, frame_h, speed):
+def spawn_obstacle(frame_w, frame_h, speed, homing_chance=0.0, turn_rate=0.0, force_homing=False):
     radius = random.randint(OBSTACLE_RADIUS_MIN, OBSTACLE_RADIUS_MAX)
     x, y, vx, vy = _spawn_edge_and_velocity(frame_w, frame_h, radius, speed)
+    homing = force_homing or random.random() < homing_chance
     return {
         "x": x,
         "y": y,
         "vx": vx,
         "vy": vy,
+        "speed": speed,
         "radius": radius,
         "z": random.random(),
         "shape": random.choice(OBSTACLE_SHAPES),
         "color": random.choice(OBSTACLE_COLORS),
+        "homing": homing,
+        "turn_rate": turn_rate if homing else 0.0,
     }
 
 
-def update_obstacles(obstacles, frame_w, frame_h):
+def _steer_toward(obs, target_x, target_y):
+    dx = target_x - obs["x"]
+    dy = target_y - obs["y"]
+    dist = math.hypot(dx, dy)
+    if dist < 1:
+        return
+    desired_vx = dx / dist * obs["speed"]
+    desired_vy = dy / dist * obs["speed"]
+    obs["vx"] += (desired_vx - obs["vx"]) * obs["turn_rate"]
+    obs["vy"] += (desired_vy - obs["vy"]) * obs["turn_rate"]
+
+
+def update_obstacles(obstacles, frame_w, frame_h, target_x, target_y):
     dodged = 0
     survivors = []
     for obs in obstacles:
+        if obs["homing"]:
+            _steer_toward(obs, target_x, target_y)
         obs["x"] += obs["vx"]
         obs["y"] += obs["vy"]
         r = obs["radius"]
@@ -79,13 +97,15 @@ def draw_obstacle(frame, obs):
     x, y, r, color = int(obs["x"]), int(obs["y"]), obs["radius"], obs["color"]
     fade = 0.5 + 0.5 * obs["z"]
     faded_color = tuple(int(c * fade) for c in color)
+    outline_color = (0, 0, 255) if obs["homing"] else (0, 0, 0)
+    outline_thickness = 3 if obs["homing"] else 2
     if obs["shape"] == "circle":
         cv2.circle(frame, (x, y), r, faded_color, -1)
-        cv2.circle(frame, (x, y), r, (0, 0, 0), 2)
+        cv2.circle(frame, (x, y), r, outline_color, outline_thickness)
     elif obs["shape"] == "square":
         cv2.rectangle(frame, (x - r, y - r), (x + r, y + r), faded_color, -1)
-        cv2.rectangle(frame, (x - r, y - r), (x + r, y + r), (0, 0, 0), 2)
+        cv2.rectangle(frame, (x - r, y - r), (x + r, y + r), outline_color, outline_thickness)
     else:
         pts = np.array([(x, y - r), (x - r, y + r), (x + r, y + r)], dtype=np.int32)
         cv2.fillPoly(frame, [pts], faded_color)
-        cv2.polylines(frame, [pts], True, (0, 0, 0), 2)
+        cv2.polylines(frame, [pts], True, outline_color, outline_thickness)
