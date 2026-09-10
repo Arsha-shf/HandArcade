@@ -2,6 +2,12 @@ import cv2
 
 _FONT = cv2.FONT_HERSHEY_SIMPLEX
 
+_COMBO_FLAVOR = [
+    (2, "Nice combo!"),
+    (4, "ON FIRE!"),
+    (7, "UNSTOPPABLE!"),
+    (10, "GODLIKE!"),
+]
 
 
 class Popup:
@@ -23,7 +29,7 @@ def spawn_popup(popups, text, x, y, color=(255, 255, 255), scale=0.8, lifetime=0
 
 def update_popups(popups, dt):
     for p in popups:
-        p.y -= 40 * dt  
+        p.y -= 40 * dt
         p.life -= dt
     popups[:] = [p for p in popups if p.life > 0]
 
@@ -39,8 +45,15 @@ def draw_popups(frame, popups):
         cv2.putText(frame, p.text, origin, _FONT, scale, p.color, thickness, cv2.LINE_AA)
 
 
+def _combo_flavor(combo):
+    label = ""
+    for threshold, text in _COMBO_FLAVOR:
+        if combo >= threshold:
+            label = text
+    return label
 
-def draw_hud(frame, score, time_left, pulse=0.0):
+
+def draw_hud(frame, score, time_left, pulse=0.0, shield=None, frenzy=None):
     h, w = frame.shape[:2]
 
     overlay = frame.copy()
@@ -52,7 +65,10 @@ def draw_hud(frame, score, time_left, pulse=0.0):
                 (255, 255, 255), 2, cv2.LINE_AA)
 
     if score.combo >= 2:
+        flavor = _combo_flavor(score.combo)
         combo_text = f"Combo x{score.current_multiplier()}  ({score.combo} in a row)"
+        if flavor:
+            combo_text += f"  {flavor}"
         cv2.putText(frame, combo_text, (20, h - 20), _FONT, 0.7,
                     (0, 200, 255), 2, cv2.LINE_AA)
 
@@ -64,6 +80,41 @@ def draw_hud(frame, score, time_left, pulse=0.0):
 
     cv2.putText(frame, "Pinch a bubble to pop it  -  watch out for bombs!",
                 (20, 80), _FONT, 0.55, (200, 200, 200), 1, cv2.LINE_AA)
+
+    if shield is not None and shield.has_charge():
+        draw_shield_icon(frame, w - 46, 100)
+
+    if frenzy is not None and frenzy.is_active:
+        draw_frenzy_banner(frame, frenzy)
+
+
+def draw_shield_icon(frame, x, y):
+    size = 16
+    pts = [
+        (x, y - size),
+        (x + size, y - size // 2),
+        (x + int(size * 0.7), y + size),
+        (x, y + int(size * 1.3)),
+        (x - int(size * 0.7), y + size),
+        (x - size, y - size // 2),
+    ]
+    for i in range(len(pts)):
+        cv2.line(frame, pts[i], pts[(i + 1) % len(pts)], (210, 170, 90), 2, cv2.LINE_AA)
+    label = "Shield ready"
+    label_size, _ = cv2.getTextSize(label, _FONT, 0.5, 1)
+    cv2.putText(frame, label, (x - label_size[0] - 24, y + 8), _FONT, 0.5,
+                (210, 170, 90), 1, cv2.LINE_AA)
+
+
+def draw_frenzy_banner(frame, frenzy):
+    h, w = frame.shape[:2]
+    text = "BUBBLE FRENZY!"
+    wobble = 0.5 + 0.5 * ((frenzy.time_remaining * 6) % 1.0)
+    scale = 1.2 + 0.15 * wobble
+    size, _ = cv2.getTextSize(text, _FONT, scale, 3)
+    origin = (w // 2 - size[0] // 2, 115)
+    cv2.putText(frame, text, origin, _FONT, scale, (0, 0, 0), 6, cv2.LINE_AA)
+    cv2.putText(frame, text, origin, _FONT, scale, (0, 120, 255), 3, cv2.LINE_AA)
 
 
 def draw_ready_countdown(frame, seconds_left):

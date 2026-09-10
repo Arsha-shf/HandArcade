@@ -16,6 +16,7 @@ import random
 
 from .objects import FallingObject, pick_object_type
 
+
 class Spawner:
     def __init__(self, frame_w, frame_h, base_interval_frames=38, min_interval_frames=9,
                  base_fall_speed=7.5, max_fall_speed=22.0, ramp_seconds=45, fps=30):

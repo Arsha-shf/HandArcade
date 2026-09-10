@@ -8,7 +8,9 @@ Kept separate from game.py so tuning the look never touches game logic.
 
 import math
 import random
+
 import cv2
+
 from .paw import CATCH_TTL, Paw
 
 FONT = cv2.FONT_HERSHEY_SIMPLEX

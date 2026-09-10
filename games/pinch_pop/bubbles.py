@@ -7,18 +7,25 @@ harder difficulty tiers mentioned in the ticket):
     bomb    - rare "gotcha" bubble -- popping it costs points and resets
               your combo, so players have to actually look before they
               pinch instead of just clawing at everything on screen
+    chain   - popping it also sweeps up every non-bomb bubble nearby,
+              turning a lucky cluster into one big satisfying blast
+    shield  - a one-time bomb insurance policy; pop it and the next
+              bomb you touch does nothing instead of hurting your combo
 """
 
 import math
 import random
 
 import cv2
+import numpy as np
 
 _KIND_WEIGHTS = {
-    "normal": 62,
-    "fast": 23,
-    "golden": 7,
+    "normal": 54,
+    "fast": 20,
+    "golden": 6,
     "bomb": 8,
+    "chain": 6,
+    "shield": 6,
 }
 
 _KIND_SPEC = {
@@ -26,6 +33,8 @@ _KIND_SPEC = {
     "fast":   dict(radius=(18, 28), speed=(160, 240), points=20, wobble=(14, 26), freq=(2.5, 4.0)),
     "golden": dict(radius=(32, 40), speed=(90, 140), points=60, wobble=(6, 14), freq=(1.0, 1.8)),
     "bomb":   dict(radius=(26, 36), speed=(80, 130), points=-15, wobble=(10, 20), freq=(1.5, 2.5)),
+    "chain":  dict(radius=(34, 42), speed=(90, 130), points=25, wobble=(8, 16), freq=(1.2, 2.0)),
+    "shield": dict(radius=(30, 38), speed=(90, 130), points=15, wobble=(8, 16), freq=(1.0, 1.8)),
 }
 
 _KIND_COLOR = {
@@ -33,10 +42,18 @@ _KIND_COLOR = {
     "fast": ((50, 130, 255), (20, 70, 200)),
     "golden": ((0, 215, 255), (0, 150, 210)),
     "bomb": ((45, 45, 45), (0, 0, 190)),
+    "chain": ((230, 60, 210), (150, 10, 130)),
+    "shield": ((255, 235, 210), (210, 160, 90)),
 }
 
 _GROW_IN_SECONDS = 0.15
-_GRAVITY = 260.0 
+_GRAVITY = 260.0
+_CHAIN_RADIUS = 235.0
+_MAX_PARTICLES = 260
+
+
+def _distance(x1, y1, x2, y2):
+    return math.hypot(x1 - x2, y1 - y2)
 
 
 class Bubble:
@@ -112,6 +129,25 @@ class Bubble:
             cv2.circle(frame, fuse_top, max(2, int(r * 0.14)), spark_color, -1, cv2.LINE_AA)
             return
 
+        if self.kind == "chain":
+            link_r = max(3, int(r * 0.22))
+            for ox in (-int(r * 0.4), 0, int(r * 0.4)):
+                cv2.circle(frame, (x + ox, y), link_r, (255, 255, 255), 2, cv2.LINE_AA)
+            return
+
+        if self.kind == "shield":
+            pts = np.array([
+                [x, y - int(r * 0.55)],
+                [x + int(r * 0.45), y - int(r * 0.25)],
+                [x + int(r * 0.35), y + int(r * 0.35)],
+                [x, y + int(r * 0.55)],
+                [x - int(r * 0.35), y + int(r * 0.35)],
+                [x - int(r * 0.45), y - int(r * 0.25)],
+            ], dtype=np.int32)
+            cv2.polylines(frame, [pts], True, (60, 120, 200), 2, cv2.LINE_AA)
+            cv2.circle(frame, (x, y), max(2, int(r * 0.12)), (60, 120, 200), -1, cv2.LINE_AA)
+            return
+
         for ex in (x - eye_dx, x + eye_dx):
             cv2.circle(frame, (ex, eye_y), eye_r, (255, 255, 255), -1, cv2.LINE_AA)
             cv2.circle(frame, (ex, eye_y), max(1, int(eye_r * 0.5)), (20, 20, 20), -1, cv2.LINE_AA)
@@ -160,7 +196,7 @@ class Particle:
 
 def _burst(x, y, kind):
     fill_color, border_color = _KIND_COLOR[kind]
-    count = {"normal": 10, "fast": 12, "golden": 22, "bomb": 16}[kind]
+    count = {"normal": 10, "fast": 12, "golden": 22, "bomb": 16, "chain": 26, "shield": 14}[kind]
     particles = []
     for _ in range(count):
         angle = random.uniform(0, 2 * math.pi)
@@ -177,11 +213,9 @@ class BubbleManager:
         self.bubbles = []
         self.particles = []
         self._spawn_timer = 0.0
+        self.spawn_rate_multiplier = 1.0
 
     def _spawn_interval(self, elapsed):
-        # Ramps from ~1.1s down to ~0.4s between spawns over the first
-        # 45s. TODO(harder-difficulty ticket): make this configurable
-        # per-difficulty instead of a single hardcoded curve.
         return max(0.4, 1.1 - elapsed * 0.015)
 
     def _pick_kind(self):
@@ -199,7 +233,7 @@ class BubbleManager:
         self._spawn_timer -= dt
         if self._spawn_timer <= 0:
             self._spawn(frame_w, frame_h)
-            self._spawn_timer = self._spawn_interval(elapsed)
+            self._spawn_timer = self._spawn_interval(elapsed) / max(0.1, self.spawn_rate_multiplier)
 
         for bubble in self.bubbles:
             bubble.update(dt)
@@ -208,14 +242,34 @@ class BubbleManager:
         for particle in self.particles:
             particle.update(dt)
         self.particles = [p for p in self.particles if p.alive]
+        if len(self.particles) > _MAX_PARTICLES:
+            self.particles = self.particles[-_MAX_PARTICLES:]
 
     def try_pop(self, px, py):
+        hit = None
         for bubble in reversed(self.bubbles):
             if bubble.contains_point(px, py):
-                self.bubbles.remove(bubble)
-                self.particles.extend(_burst(bubble.x, bubble.y, bubble.kind))
-                return bubble
-        return None
+                hit = bubble
+                break
+
+        if hit is None:
+            return []
+
+        self.bubbles.remove(hit)
+        self.particles.extend(_burst(hit.x, hit.y, hit.kind))
+        popped = [hit]
+
+        if hit.kind == "chain":
+            nearby = [
+                b for b in self.bubbles
+                if b.kind != "bomb" and _distance(b.x, b.y, hit.x, hit.y) <= _CHAIN_RADIUS
+            ]
+            for b in nearby:
+                self.bubbles.remove(b)
+                self.particles.extend(_burst(b.x, b.y, b.kind))
+                popped.append(b)
+
+        return popped
 
     def draw(self, frame):
         for bubble in self.bubbles:
@@ -227,3 +281,4 @@ class BubbleManager:
         self.bubbles.clear()
         self.particles.clear()
         self._spawn_timer = 0.0
+        self.spawn_rate_multiplier = 1.0
