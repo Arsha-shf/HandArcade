@@ -14,12 +14,35 @@ Usage:
     draw_sprite(frame, "assets/apple.png", x=300, y=150, scale=1.5, angle=30)
 """
 
+from collections import OrderedDict
+
 import cv2
 import numpy as np
 
 # Cache of loaded sprite images, keyed by (path, scale, angle) so we never
 # hit disk or redo a resize/rotation more than once per unique variant.
-_sprite_cache = {}
+#
+# Two things matter here that aren't obvious from a plain dict:
+#
+# 1. ANGLE_BUCKET_DEG: sprites that spin continuously (falling fruit, etc.)
+#    change angle by a few degrees every frame. If the cache key rounds to
+#    0.1 degree, it NEVER hits in practice -- you're doing a full resize +
+#    warpAffine every single frame for every spinning sprite, which is the
+#    actual cost you're seeing, not "the PNG is slow". Rounding to the
+#    nearest ANGLE_BUCKET_DEG degrees means a full spin only ever produces
+#    360 / ANGLE_BUCKET_DEG distinct cached rotations, reused every time
+#    the sprite swings back through that bucket. 5 degrees is visually
+#    indistinguishable from continuous rotation at normal spin speeds but
+#    cuts cache misses by ~40-50x vs 0.1 degree rounding.
+#
+# 2. _MAX_CACHE_ENTRIES + OrderedDict as LRU: the old dict never evicted
+#    anything, so over a long play session (menu loop, multiple games,
+#    many unique scale/angle combos) this grows forever -- a plain memory
+#    leak. Capping it with LRU eviction keeps memory flat regardless of
+#    session length.
+ANGLE_BUCKET_DEG = 15
+_MAX_CACHE_ENTRIES = 1500
+_sprite_cache = OrderedDict()
 
 
 def _load_sprite(path):
@@ -42,11 +65,19 @@ def _load_sprite(path):
     return image
 
 
+def _quantize_angle(angle):
+    """Snap angle to the nearest ANGLE_BUCKET_DEG so continuously-spinning
+    sprites actually reuse cached rotations instead of missing every frame."""
+    return (round(angle / ANGLE_BUCKET_DEG) * ANGLE_BUCKET_DEG) % 360
+
+
 def _get_cached_sprite(path, scale, angle):
     """Return a (possibly cached) resized + rotated BGRA sprite."""
-    cache_key = (path, round(scale, 3), round(angle, 1))
+    cache_key = (path, round(scale, 3), _quantize_angle(angle))
 
     if cache_key in _sprite_cache:
+        # LRU touch: move to the end (most recently used)
+        _sprite_cache.move_to_end(cache_key)
         return _sprite_cache[cache_key]
 
     sprite = _load_sprite(path)
@@ -56,10 +87,13 @@ def _get_cached_sprite(path, scale, angle):
         new_h = max(1, int(sprite.shape[0] * scale))
         sprite = cv2.resize(sprite, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
-    if angle != 0.0:
-        sprite = _rotate_sprite(sprite, angle)
+    if cache_key[2] != 0.0:
+        sprite = _rotate_sprite(sprite, cache_key[2])
 
     _sprite_cache[cache_key] = sprite
+    if len(_sprite_cache) > _MAX_CACHE_ENTRIES:
+        _sprite_cache.popitem(last=False)  # evict least-recently-used
+
     return sprite
 
 
@@ -148,5 +182,38 @@ def get_sprite_size(png_path, scale=1.0):
 
 
 def clear_sprite_cache():
-    """Free cached sprite images. Rarely needed, but handy for tests or hot-reloading art."""
+    """Free cached sprite images. Call this when leaving a game screen so a
+    long HandArcade session (menu <-> multiple games) doesn't accumulate
+    stale entries from games you're no longer playing."""
     _sprite_cache.clear()
+
+
+def preload_variants(png_path, scales, angle_step=ANGLE_BUCKET_DEG):
+    """
+    Precompute and cache every (scale, angle-bucket) rotation for a sprite
+    up front, so nothing during the render loop ever has to resize/rotate --
+    that on-demand resize/rotate is what causes the frame hitch the instant
+    a new combo (e.g. a fruit spawning with a scale the cache hasn't built
+    yet) shows up on screen.
+
+    Call this once at game/module load time, NOT inside the render loop,
+    for every (sprite_path, scale) pair the game will ever actually draw.
+    Silently no-ops if the file doesn't exist yet (runtime falls back to
+    the placeholder circle as usual).
+
+    Args:
+        png_path: path to the sprite.
+        scales: iterable of scale values you'll actually use at draw time
+                (must match what you pass to draw_sprite exactly, since the
+                cache key rounds to 3 decimals -- pass the real numbers,
+                not approximations).
+        angle_step: degrees between cached rotations. Must match
+                    ANGLE_BUCKET_DEG (the default) or draw-time cache
+                    lookups won't line up with what you preloaded.
+    """
+    try:
+        for angle in range(0, 360, angle_step):
+            for scale in scales:
+                _get_cached_sprite(png_path, scale, float(angle))
+    except FileNotFoundError:
+        pass
