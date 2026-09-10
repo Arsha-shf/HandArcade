@@ -12,16 +12,26 @@ import time
 
 import cv2
 
-from engine.sprites import draw_sprite, get_sprite_size
+from engine.sprites import ANGLE_BUCKET_DEG, draw_sprite, get_sprite_size, preload_variants
 
 ASSET_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets")
 
-# (sprite filename, fallback color BGR, points, fallback radius px)
+# (sprite filename, sliced sprite filename or None, fallback color BGR, points,
+#  fallback radius px, base_scale)
+#
+# base_scale corrects for sprites whose native pixel size doesn't match the
+# ~90px effective diameter most fruits are authored at. It's computed as
+# target_diameter / native_max_dimension and is applied ONLY to the real
+# sprite draw, never to the fallback circle.
 FRUIT_TYPES = [
-    ("apple.png", (60, 60, 220), 10, 45),
-    ("orange.png", (0, 150, 255), 10, 45),
-    ("watermelon.png", (60, 180, 60), 15, 55),
-    ("lemon.png", (40, 220, 230), 10, 40),
+    ("apple.png", None, (60, 60, 220), 10, 45, 1.0),
+    ("orange.png", None, (0, 150, 255), 10, 45, 1.0),
+    ("watermelon.png", None, (60, 180, 60), 15, 55, 1.0),
+    ("lemon.png", None, (40, 220, 230), 10, 40, 1.0),
+    # baste/baz are 208x209 native px. Sized to match watermelon (the
+    # biggest fruit, fallback_radius=55 -> target diameter 110px):
+    # base_scale = 110 / 209 ≈ 0.526.
+    ("baste.png", "baz.png", (90, 140, 200), 12, 55, 110 / 209),
 ]
 
 BOMB_SPRITE = "bomb.png"
@@ -31,11 +41,48 @@ BOMB_CHANCE = 0.15
 
 GRAVITY = 900.0  # px/s^2
 
+# Discrete visual-variety scale multipliers, used INSTEAD OF a continuous
+# random.uniform(). Continuous per-instance scale means every fruit gets a
+# scale value the sprite cache has never seen, forcing a fresh resize+rotate
+# right when it spawns -- that's what causes the hitch when a fruit "comes
+# onto the screen". A small fixed set means every possible value gets
+# preloaded once at startup (see _warmup_sprite_cache below) and gameplay
+# never triggers image processing again.
+SCALE_VARIANTS = (0.85, 0.95, 1.05, 1.15)
+
 _missing_sprite_warned = set()
 
 
 def _sprite_path(filename):
     return os.path.join(ASSET_DIR, filename)
+
+
+def _warmup_sprite_cache():
+    """
+    Precompute every (sprite, scale, angle-bucket) combo this game will ever
+    draw, once, at import time -- before the render loop starts. This is
+    what actually kills the on-screen stutter: without it, the FIRST time a
+    given scale/angle combo is needed mid-game, cv2 has to resize + rotate
+    right then, on that frame, which is the hitch you're seeing.
+
+    A short one-time delay at game launch is the tradeoff, in exchange for
+    zero image-processing cost during actual gameplay frames.
+    """
+    all_types = list(FRUIT_TYPES) + [(BOMB_SPRITE, None, BOMB_COLOR, 0, BOMB_RADIUS, 1.0)]
+    for sprite, sliced_sprite, _color, _points, _fallback_radius, base_scale in all_types:
+        full_scales = [round(v * base_scale, 3) for v in SCALE_VARIANTS]
+        preload_variants(sprite, full_scales, angle_step=ANGLE_BUCKET_DEG)
+        if sliced_sprite:
+            preload_variants(sliced_sprite, full_scales, angle_step=ANGLE_BUCKET_DEG)
+        else:
+            # no dedicated sliced sprite -> draw() shrinks the whole sprite to
+            # half-scale for the two "halves", which is a different scale
+            # value than the whole-fruit draw. Preload that too.
+            half_scales = [round(s * 0.5, 3) for s in full_scales]
+            preload_variants(sprite, half_scales, angle_step=ANGLE_BUCKET_DEG)
+
+
+_warmup_sprite_cache()
 
 
 def _draw_fruit_sprite(frame, filename, x, y, scale, angle, fallback_color, fallback_radius):
@@ -69,17 +116,27 @@ class Fruit:
         self.is_bomb = random.random() < BOMB_CHANCE
         if self.is_bomb:
             self.sprite = BOMB_SPRITE
+            self.sliced_sprite = None
             self.color = BOMB_COLOR
             self.points = 0
             self.fallback_radius = BOMB_RADIUS
+            self.base_scale = 1.0
         else:
-            self.sprite, self.color, self.points, self.fallback_radius = random.choice(FRUIT_TYPES)
+            (self.sprite, self.sliced_sprite, self.color, self.points,
+             self.fallback_radius, self.base_scale) = random.choice(FRUIT_TYPES)
 
         self.x = x
         self.y = y
         self.vx = vx
         self.vy = vy
-        self.scale = random.uniform(0.85, 1.2)
+
+        # Picked from a small fixed set (see SCALE_VARIANTS) instead of a
+        # continuous random float, so every possible value was already
+        # preloaded into the sprite cache at startup -- no mid-game misses.
+        self.variance_scale = random.choice(SCALE_VARIANTS)
+        self.scale = self.variance_scale
+        self.sprite_scale = round(self.variance_scale * self.base_scale, 3)
+
         self.angle = random.uniform(0, 360)
         self.spin_speed = random.uniform(-120, 120)  # deg/sec, purely visual
 
@@ -87,7 +144,9 @@ class Fruit:
         self.slice_time = None
         self.alive = True  # False once it should be removed from the list
 
-        self.radius = _sprite_radius(self.sprite, self.scale, self.fallback_radius)
+        self.radius = _sprite_radius(self.sprite, self.sprite_scale, self.fallback_radius)
+        if not os.path.exists(_sprite_path(self.sprite)):
+            self.radius = self.fallback_radius * self.scale
 
     def update(self, dt):
         self.vy += GRAVITY * dt
@@ -131,15 +190,20 @@ class Fruit:
         self.vy -= 120
 
     def draw(self, frame):
-        scale = self.scale
         if self.sliced:
-            # cheap slice effect: draw two offset halves fading via extra spin
             elapsed = time.time() - self.slice_time
             offset = elapsed * 160
-            _draw_fruit_sprite(frame, self.sprite, self.x - offset, self.y, scale * 0.5,
+
+            # if a dedicated sliced sprite exists (e.g. baz.png for baste.png),
+            # draw two copies of THAT flying apart; otherwise fall back to the
+            # old trick of drawing two shrunk halves of the whole-fruit sprite.
+            draw_name = self.sliced_sprite if self.sliced_sprite else self.sprite
+            half_scale = self.sprite_scale if self.sliced_sprite else round(self.sprite_scale * 0.5, 3)
+
+            _draw_fruit_sprite(frame, draw_name, self.x - offset, self.y, half_scale,
                                 self.angle - 20, self.color, self.fallback_radius)
-            _draw_fruit_sprite(frame, self.sprite, self.x + offset, self.y, scale * 0.5,
+            _draw_fruit_sprite(frame, draw_name, self.x + offset, self.y, half_scale,
                                 self.angle + 20, self.color, self.fallback_radius)
         else:
-            _draw_fruit_sprite(frame, self.sprite, self.x, self.y, scale, self.angle,
-                                self.color, self.fallback_radius)
+            _draw_fruit_sprite(frame, self.sprite, self.x, self.y, self.sprite_scale,
+                                self.angle, self.color, self.fallback_radius)
