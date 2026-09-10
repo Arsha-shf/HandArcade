@@ -15,6 +15,7 @@ import cv2
 
 from engine.sprites import draw_sprite, get_sprite_size
 
+
 @dataclass
 class ObjectType:
     name: str

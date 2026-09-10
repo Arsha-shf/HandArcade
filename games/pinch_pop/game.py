@@ -1,7 +1,9 @@
 import random
 import time
+
 import cv2
 import numpy as np
+
 from engine.audio import play_sound
 from engine.camera import show
 from engine.tracking import (
@@ -10,6 +12,7 @@ from engine.tracking import (
     get_fingertip_position,
     get_pinch_distance,
 )
+
 from . import hud
 from .bubbles import BubbleManager
 from .effects import FrenzyManager, HandSmoother, HandTracker, PinchTracker, ScreenShake, ShieldStatus

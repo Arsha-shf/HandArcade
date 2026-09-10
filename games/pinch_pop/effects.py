@@ -7,6 +7,7 @@ pacing variety, and a one-charge shield power-up.
 
 import random
 
+
 class HandSmoother:
     def __init__(self, alpha=0.55):
         self.alpha = alpha
@@ -56,7 +57,7 @@ class HandTracker:
 
         assignments = {}
         matched_dets = set()
-        for dist, det_i, track_id in candidates:
+        for _dist, det_i, track_id in candidates:
             if det_i in matched_dets or track_id not in unmatched_tracks:
                 continue
             assignments[det_i] = track_id
