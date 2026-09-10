@@ -21,14 +21,10 @@ class Score:
         return min(MAX_MULTIPLIER, 1 + (self.combo - 1) // MULTIPLIER_STEP)
 
     def register_pop(self, points, kind, now):
-        """
-        Apply the result of popping a bubble. Returns (points_gained, multiplier)
-        so the caller can build a matching "+N x M" popup.
-        """
         if kind == "bomb":
             self.combo = 0
             self.bombs_hit += 1
-            self.total = max(0, self.total + points)  # points is negative for bombs
+            self.total = max(0, self.total + points)
             self._last_pop_time = now
             return points, 1
 
