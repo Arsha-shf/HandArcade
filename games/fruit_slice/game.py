@@ -36,6 +36,8 @@ TARGET_FPS = 60
 FRAME_BUDGET = 1.0 / TARGET_FPS
 FPS_SAMPLE_COUNT = 30  # rolling average window so the FPS readout doesn't jitter
 
+GAME_OVER_ANIM_DURATION = 0.5  # seconds for the game-over screen to fully animate in
+
 SOUND_SLICE = "assets/sounds/slice.wav"
 SOUND_BOMB = "assets/sounds/hit.wav"
 
@@ -65,6 +67,7 @@ def run_fruit_slice(cap, tracker, difficulty="medium"):
     score = 0
     misses = 0
     game_over = False
+    game_over_start = None
     flash_timer = 0.0
 
     start_time = time.time()
@@ -111,6 +114,8 @@ def run_fruit_slice(cap, tracker, difficulty="medium"):
             )
             if bomb_hit_this_frame:
                 flash_timer = FLASH_DURATION
+            if game_over and game_over_start is None:
+                game_over_start = time.time()
 
         _update_particles(particles, dt)
 
@@ -141,7 +146,9 @@ def run_fruit_slice(cap, tracker, difficulty="medium"):
             flash_timer = max(0.0, flash_timer - dt)
 
         if game_over:
-            draw_game_over(frame, score)
+            elapsed = time.time() - game_over_start
+            progress = min(1.0, elapsed / GAME_OVER_ANIM_DURATION)
+            draw_game_over(frame, score, progress=progress)
         else:
             draw_hud(frame, score, misses, MAX_MISSES, avg_fps, difficulty)
 

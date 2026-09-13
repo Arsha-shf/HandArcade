@@ -13,8 +13,11 @@ letterboxed via engine.camera.show() -- see engine/camera.py for why
 those two are handled together instead of with a plain cv2.imshow().
 
 Controls on the menu:
-    1-4  -> launch that game
-    q    -> quit the app
+    1-4     -> launch that game
+    q       -> quit the app
+    m       -> toggle mute
+    -  / =  -> music volume down / up
+    [  / ]  -> sfx volume down / up
 
 Contract each game's run_xxx() must follow:
     run_xxx(cap, tracker) -> str | None
@@ -28,7 +31,16 @@ Contract each game's run_xxx() must follow:
 
 import cv2
 
-from engine.audio import init_audio
+from engine.audio import (
+    get_music_volume,
+    get_sfx_volume,
+    init_audio,
+    is_muted,
+    play_music,
+    set_music_volume,
+    set_sfx_volume,
+    toggle_mute,
+)
 from engine.camera import init_fullscreen_window, open_camera, show
 from engine.tracking import HandTracker
 from engine.transitions import fade_in, fade_out
@@ -46,6 +58,9 @@ GAMES = [
 ]
 
 WINDOW_NAME = "HandArcade"
+ARCADE_MUSIC = "assets/music/arcade_theme.mp3"
+
+VOLUME_STEP = 0.05
 
 
 def _draw_menu(frame):
@@ -60,6 +75,55 @@ def _draw_menu(frame):
         y = start_y + i * line_height
         cv2.putText(frame, f"{i + 1}. {name}", (40, y),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 255), 2)
+
+    _draw_audio_controls(frame)
+
+
+def _draw_audio_controls(frame):
+    h, w = frame.shape[:2]
+
+    mute_text = "MUTED (m to unmute)" if is_muted() else "Sound ON (m to mute)"
+    mute_color = (0, 0, 255) if is_muted() else (0, 220, 0)
+    cv2.putText(frame, mute_text, (20, h - 90),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, mute_color, 1, cv2.LINE_AA)
+
+    music_pct = int(round(get_music_volume() * 100))
+    sfx_pct = int(round(get_sfx_volume() * 100))
+
+    cv2.putText(frame, f"Music: {music_pct:3d}%   ( - / = )", (20, h - 60),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1, cv2.LINE_AA)
+    cv2.putText(frame, f"SFX:   {sfx_pct:3d}%   ( [ / ] )", (20, h - 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1, cv2.LINE_AA)
+
+    _draw_volume_bar(frame, 220, h - 68, music_pct)
+    _draw_volume_bar(frame, 220, h - 38, sfx_pct)
+
+
+def _draw_volume_bar(frame, x, y, pct, width=100, height=12):
+    cv2.rectangle(frame, (x, y), (x + width, y + height), (80, 80, 80), 1)
+    fill_w = int(width * max(0, min(100, pct)) / 100)
+    if fill_w > 0:
+        cv2.rectangle(frame, (x, y), (x + fill_w, y + height), (0, 200, 255), -1)
+
+
+def _handle_audio_key(key):
+    """Returns True if the key was an audio control and was handled."""
+    if key == ord("m"):
+        toggle_mute()
+        return True
+    if key == ord("-"):
+        set_music_volume(get_music_volume() - VOLUME_STEP)
+        return True
+    if key == ord("="):
+        set_music_volume(get_music_volume() + VOLUME_STEP)
+        return True
+    if key == ord("["):
+        set_sfx_volume(get_sfx_volume() - VOLUME_STEP)
+        return True
+    if key == ord("]"):
+        set_sfx_volume(get_sfx_volume() + VOLUME_STEP)
+        return True
+    return False
 
 
 def _show_menu_loop(cap):
@@ -82,6 +146,7 @@ def _show_menu_loop(cap):
             return "quit"
         if key in (ord("1"), ord("2"), ord("3"), ord("4")):
             return int(chr(key)) - 1
+        _handle_audio_key(key)
 
 
 def run_menu():
@@ -93,6 +158,7 @@ def run_menu():
 
     init_fullscreen_window(WINDOW_NAME)
     init_audio()
+    play_music(ARCADE_MUSIC)
 
     print("HandArcade menu running. Press 1-4 to play, 'q' to quit.")
 

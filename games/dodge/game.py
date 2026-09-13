@@ -1,5 +1,8 @@
+import time
+
 import cv2
 
+from engine import hud as engine_hud
 from engine.audio import play_sound
 from engine.camera import show
 
@@ -25,6 +28,8 @@ DIFFICULTY_KEYS = {
 }
 
 SWARM_WARNING_FRAMES = 20
+
+GAME_OVER_ANIM_DURATION = 0.5  # seconds for the game-over screen to fully animate in
 
 
 def _select_difficulty(cap):
@@ -67,7 +72,9 @@ def run_dodge(cap, tracker):
     score = 0
     dodged_total = 0
     alive = True
+    game_over_start = None
     game_over_message = ""
+    engine_hud.reset_score_animation()
 
     while True:
         success, frame = cap.read()
@@ -110,6 +117,7 @@ def run_dodge(cap, tracker):
 
             if check_collision(player, obstacles):
                 alive = False
+                game_over_start = time.time()
                 game_over_message = pick_game_over_line(difficulty)
                 play_sound(SOUND_HIT)
 
@@ -123,7 +131,9 @@ def run_dodge(cap, tracker):
             swarm_flash -= 1
 
         if not alive:
-            draw_game_over(frame, score, game_over_message)
+            elapsed = time.time() - game_over_start
+            progress = min(1.0, elapsed / GAME_OVER_ANIM_DURATION)
+            draw_game_over(frame, score, game_over_message, progress=progress)
 
         show(WINDOW_NAME, frame)
 
@@ -142,6 +152,8 @@ def run_dodge(cap, tracker):
             score = 0
             dodged_total = 0
             alive = True
+            game_over_start = None
+            engine_hud.reset_score_animation()
         if key == ord("d") and not alive:
             new_difficulty = _select_difficulty(cap)
             if new_difficulty in ("menu", "quit", None):
