@@ -20,6 +20,18 @@ PAW_COLORS = [
     (255, 90, 180),
 ]
 
+
+def _ease_out_cubic(t):
+    return 1 - (1 - t) ** 3
+
+
+def _ease_out_back(t):
+    c1 = 1.70158
+    c3 = c1 + 1
+    t = max(0.0, min(1.0, t))
+    return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2
+
+
 def draw_hud(frame, score, misses, max_misses, combo):
     h, w = frame.shape[:2]
 
@@ -38,23 +50,56 @@ def draw_catch_flash(frame, x, y, points):
     text = f"+{points}" if points > 0 else str(points)
     cv2.putText(frame, text, (int(x) - 15, int(y) - 30), FONT, 0.9, color, 2, cv2.LINE_AA)
 
-def draw_game_over(frame, score):
+def draw_game_over(frame, score, progress=1.0):
+    """
+    Game-over overlay. Pass `progress` from 0.0 (just triggered) up to 1.0
+    while calling this every frame:
+      - background dims in
+      - "GAME OVER" drops in from above with a bounce/overshoot
+      - final score counts up from 0 to its real value
+      - hint fades in last
+    progress=1.0 (default) renders fully settled.
+    """
     h, w = frame.shape[:2]
+    p = max(0.0, min(1.0, progress))
+
+    dim_eased = _ease_out_cubic(min(1.0, p / 0.3))
     overlay = frame.copy()
     cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
+    cv2.addWeighted(overlay, 0.55 * dim_eased, frame, 1 - 0.55 * dim_eased, 0, frame)
 
-    text = "GAME OVER"
-    (tw, _), _ = cv2.getTextSize(text, FONT, 1.6, 3)
-    cv2.putText(frame, text, ((w - tw) // 2, h // 2 - 30), FONT, 1.6, (0, 0, 255), 3, cv2.LINE_AA)
+    # Title: bounces/drops in from above (0% -> 45%)
+    title_p = max(0.0, min(1.0, p / 0.45))
+    if title_p > 0.0:
+        bounce = _ease_out_back(title_p)
+        text = "GAME OVER"
+        scale = max(0.1, 1.6 * bounce)
+        (tw, _), _ = cv2.getTextSize(text, FONT, scale, 3)
+        y_offset = int((1.0 - min(1.0, title_p * 1.4)) * -80)
+        title_layer = frame.copy()
+        cv2.putText(title_layer, text, ((w - tw) // 2, h // 2 - 30 + y_offset), FONT, scale, (0, 0, 255), 3, cv2.LINE_AA)
+        alpha = min(1.0, title_p * 2.0)
+        cv2.addWeighted(title_layer, alpha, frame, 1 - alpha, 0, frame)
 
-    score_text = f"Final Score: {score}"
-    (tw2, _), _ = cv2.getTextSize(score_text, FONT, 1.0, 2)
-    cv2.putText(frame, score_text, ((w - tw2) // 2, h // 2 + 20), FONT, 1.0, (255, 255, 255), 2, cv2.LINE_AA)
+    # Score: counts up from 0 (35% -> 70%)
+    score_p = max(0.0, min(1.0, (p - 0.35) / 0.35))
+    if score_p > 0.0:
+        score_eased = _ease_out_cubic(score_p)
+        shown_score = int(score * score_eased) if score_p < 1.0 else score
+        rest_layer = frame.copy()
+        score_text = f"Final Score: {shown_score}"
+        (tw2, _), _ = cv2.getTextSize(score_text, FONT, 1.0, 2)
+        cv2.putText(rest_layer, score_text, ((w - tw2) // 2, h // 2 + 20), FONT, 1.0, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.addWeighted(rest_layer, score_eased, frame, 1 - score_eased, 0, frame)
 
-    hint = "r = retry    ESC = menu    q = quit"
-    (tw3, _), _ = cv2.getTextSize(hint, FONT, 0.7, 2)
-    cv2.putText(frame, hint, ((w - tw3) // 2, h // 2 + 65), FONT, 0.7, (200, 200, 200), 2, cv2.LINE_AA)
+    # Hint: comes in last (60% -> 100%)
+    hint_p = max(0.0, min(1.0, (p - 0.6) / 0.4))
+    if hint_p > 0.02:
+        hint_layer = frame.copy()
+        hint = "r = retry    ESC = menu    q = quit"
+        (tw3, _), _ = cv2.getTextSize(hint, FONT, 0.7, 2)
+        cv2.putText(hint_layer, hint, ((w - tw3) // 2, h // 2 + 65), FONT, 0.7, (200, 200, 200), 2, cv2.LINE_AA)
+        cv2.addWeighted(hint_layer, hint_p, frame, 1 - hint_p, 0, frame)
 
 def draw_paw(frame, paw, base_radius):
     x, y = int(paw.x), int(paw.y)

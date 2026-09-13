@@ -38,6 +38,8 @@ MAX_DT_SCALE = 3.0
 SHAKE_DURATION = 8
 SHAKE_MAGNITUDE = 14
 
+GAME_OVER_ANIM_DURATION = 0.5  # seconds for the game-over screen to fully animate in
+
 SOUND_CATCH_GOOD = "assets/sounds/pop.wav"
 SOUND_CATCH_BAD = "assets/sounds/hit.wav"
 
@@ -79,6 +81,7 @@ def run_catch(cap, tracker):
     misses = 0
     combo = 0
     state = _State.PLAYING
+    game_over_start = None
     flashes = []
     particles = []
     shake_frames = 0
@@ -160,13 +163,16 @@ def run_catch(cap, tracker):
 
             if misses >= MAX_MISSES:
                 state = _State.GAME_OVER
+                game_over_start = time.time()
 
         else:
             for obj in spawner.objects:
                 obj.draw(frame)
             for paw in paws:
                 draw_paw(frame, paw, PALM_CATCH_RADIUS)
-            draw_game_over(frame, score)
+            elapsed = time.time() - game_over_start
+            progress = min(1.0, elapsed / GAME_OVER_ANIM_DURATION)
+            draw_game_over(frame, score, progress=progress)
 
         if shake_frames > 0:
             mag = int(SHAKE_MAGNITUDE * (shake_frames / SHAKE_DURATION))
@@ -191,3 +197,4 @@ def run_catch(cap, tracker):
             particles = []
             shake_frames = 0
             state = _State.PLAYING
+            game_over_start = None

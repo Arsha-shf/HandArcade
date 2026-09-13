@@ -10,6 +10,17 @@ _COMBO_FLAVOR = [
 ]
 
 
+def _ease_out_cubic(t):
+    return 1 - (1 - t) ** 3
+
+
+def _ease_out_back(t):
+    c1 = 1.70158
+    c3 = c1 + 1
+    t = max(0.0, min(1.0, t))
+    return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2
+
+
 class Popup:
     __slots__ = ("text", "x", "y", "life", "max_life", "color", "scale")
 
@@ -134,24 +145,66 @@ def draw_ready_countdown(frame, seconds_left):
                 _FONT, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
 
 
-def draw_game_over(frame, score):
+def draw_game_over(frame, score, progress=1.0):
+    """
+    Game-over overlay. Pass `progress` from 0.0 (just triggered) up to 1.0
+    while calling this every frame:
+      - background dims in
+      - "GAME OVER" drops in from above with a bounce/overshoot
+      - final score counts up from 0 to its real value
+      - combo/bomb stats fade in next
+      - hint fades in last
+    progress=1.0 (default) renders fully settled.
+    """
     h, w = frame.shape[:2]
+    p = max(0.0, min(1.0, progress))
+
+    dim_eased = _ease_out_cubic(min(1.0, p / 0.3))
     overlay = frame.copy()
     cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
+    cv2.addWeighted(overlay, 0.55 * dim_eased, frame, 1 - 0.55 * dim_eased, 0, frame)
 
-    def centered(text, y, scale, color, thickness):
+    def centered(target, text, y, scale, color, thickness):
         size, _ = cv2.getTextSize(text, _FONT, scale, thickness)
-        cv2.putText(frame, text, (w // 2 - size[0] // 2, y), _FONT, scale,
+        cv2.putText(target, text, (w // 2 - size[0] // 2, y), _FONT, scale,
                     color, thickness, cv2.LINE_AA)
 
-    centered("GAME OVER", h // 2 - 100, 1.6, (255, 255, 255), 3)
-    centered(f"Score: {score.total}", h // 2 - 40, 1.1, (0, 255, 255), 2)
-    centered(f"Best combo: x{max(1, score.current_multiplier() if score.combo else 1)}"
-              f"  ({score.best_combo} in a row)", h // 2, 0.7, (200, 200, 200), 1)
+    # Title: bounces/drops in from above (0% -> 45%)
+    title_p = max(0.0, min(1.0, p / 0.45))
+    if title_p > 0.0:
+        bounce = _ease_out_back(title_p)
+        scale = max(0.1, 1.6 * bounce)
+        y_offset = int((1.0 - min(1.0, title_p * 1.4)) * -80)
+        title_layer = frame.copy()
+        centered(title_layer, "GAME OVER", h // 2 - 100 + y_offset, scale, (255, 255, 255), 3)
+        alpha = min(1.0, title_p * 2.0)
+        cv2.addWeighted(title_layer, alpha, frame, 1 - alpha, 0, frame)
 
-    bomb_line = "Didn't touch a single bomb. Show-off." if score.bombs_hit == 0 else \
-        f"Bombs popped: {score.bombs_hit} (ouch)"
-    centered(bomb_line, h // 2 + 35, 0.65, (170, 170, 255), 1)
+    # Score: counts up from 0 (35% -> 65%)
+    score_p = max(0.0, min(1.0, (p - 0.35) / 0.3))
+    if score_p > 0.0:
+        score_eased = _ease_out_cubic(score_p)
+        shown_score = int(score.total * score_eased) if score_p < 1.0 else score.total
+        score_layer = frame.copy()
+        centered(score_layer, f"Score: {shown_score}", h // 2 - 40, 1.1, (0, 255, 255), 2)
+        cv2.addWeighted(score_layer, score_eased, frame, 1 - score_eased, 0, frame)
 
-    centered("R = play again    ESC = menu    Q = quit", h // 2 + 90, 0.7, (255, 255, 255), 2)
+    # Combo + bomb stats: fade in next (55% -> 80%)
+    stats_p = max(0.0, min(1.0, (p - 0.55) / 0.25))
+    if stats_p > 0.02:
+        stats_layer = frame.copy()
+        centered(stats_layer,
+                 f"Best combo: x{max(1, score.current_multiplier() if score.combo else 1)}"
+                 f"  ({score.best_combo} in a row)", h // 2, 0.7, (200, 200, 200), 1)
+        bomb_line = "Didn't touch a single bomb. Show-off." if score.bombs_hit == 0 else \
+            f"Bombs popped: {score.bombs_hit} (ouch)"
+        centered(stats_layer, bomb_line, h // 2 + 35, 0.65, (170, 170, 255), 1)
+        cv2.addWeighted(stats_layer, stats_p, frame, 1 - stats_p, 0, frame)
+
+    # Hint: comes in last (75% -> 100%)
+    hint_p = max(0.0, min(1.0, (p - 0.75) / 0.25))
+    if hint_p > 0.02:
+        hint_layer = frame.copy()
+        centered(hint_layer, "R = play again    ESC = menu    Q = quit", h // 2 + 90, 0.7,
+                 (255, 255, 255), 2)
+        cv2.addWeighted(hint_layer, hint_p, frame, 1 - hint_p, 0, frame)

@@ -25,6 +25,8 @@ READY_SECONDS = 3
 PINCH_ENTER_THRESHOLD = 0.055
 PINCH_EXIT_THRESHOLD = 0.075
 
+GAME_OVER_ANIM_DURATION = 0.5  # seconds for the game-over screen to fully animate in
+
 SOUND_POP = "assets/sounds/pop.wav"
 SOUND_BOMB = "assets/sounds/hit.wav"
 SOUND_SHIELD = "assets/sounds/shield.wav"
@@ -142,6 +144,7 @@ def run_pinch_pop(cap, tracker):
 
     ready_start = time.time()
     round_start = None
+    game_over_start = None
     last_time = time.time()
     pinch_prev = {}
     score_pulse = 0
@@ -208,12 +211,15 @@ def run_pinch_pop(cap, tracker):
 
             if time_left <= 0:
                 state = "game_over"
+                game_over_start = now
 
         else:
             hud.update_popups(popups, dt)
             bubble_mgr.draw(frame)
             hud.draw_popups(frame, popups)
-            hud.draw_game_over(frame, score)
+            elapsed = now - game_over_start
+            progress = min(1.0, elapsed / GAME_OVER_ANIM_DURATION)
+            hud.draw_game_over(frame, score, progress=progress)
 
         shake_dx, shake_dy = shake.offset()
         if shake_dx or shake_dy:
@@ -234,6 +240,7 @@ def run_pinch_pop(cap, tracker):
             bubble_mgr.reset()
             popups.clear()
             ready_start = time.time()
+            game_over_start = None
             pinch_prev = {}
             shield.reset()
             frenzy.reset()

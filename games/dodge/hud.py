@@ -25,8 +25,8 @@ def draw_swarm_warning(frame):
                 cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 255), 3)
 
 
-def draw_game_over(frame, score, message=None):
-    _draw_game_over(frame, score, message=message, lines=GAME_OVER_LINES)
+def draw_game_over(frame, score, message=None, progress=1.0):
+    _draw_game_over(frame, score, message=message, lines=GAME_OVER_LINES, progress=progress)
 
 
 def draw_difficulty_select(frame):
