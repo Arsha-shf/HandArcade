@@ -119,4 +119,77 @@ def play_sound(path, volume=1.0):
     if sound is None:
         return
 
-    final_volume = max(0.0, min(1.0,
+    final_volume = max(0.0, min(1.0, volume * _effective_sfx_volume()))
+    sound.set_volume(final_volume)
+    try:
+        sound.play()
+    except Exception as e:
+        print(f"[audio] Could not play sound {path}: {e}")
+
+def play_music(path, loop=True):
+    """Start looping background music. Safe no-op if audio unavailable."""
+    global _current_music
+
+    if not _PYGAME_AVAILABLE or not _initialized:
+        return
+
+    if not os.path.exists(path):
+        print(f"[audio] Missing music file: {path}")
+        return
+
+    try:
+        pygame.mixer.music.load(path)
+        pygame.mixer.music.set_volume(_effective_music_volume())
+        pygame.mixer.music.play(-1 if loop else 0)
+        _current_music = path
+    except Exception as e:
+        print(f"[audio] Could not play music {path}: {e}")
+
+
+def stop_music():
+    global _current_music
+    if not _PYGAME_AVAILABLE or not _initialized:
+        return
+    try:
+        pygame.mixer.music.stop()
+        _current_music = None
+    except Exception as e:
+        print(f"[audio] Could not stop music: {e}")
+
+
+def get_music_volume():
+    return _settings["music_volume"]
+
+
+def set_music_volume(volume):
+    _settings["music_volume"] = max(0.0, min(1.0, volume))
+    if _PYGAME_AVAILABLE and _initialized:
+        try:
+            pygame.mixer.music.set_volume(_effective_music_volume())
+        except Exception as e:
+            print(f"[audio] Could not set music volume: {e}")
+    _save_settings()
+
+
+def get_sfx_volume():
+    return _settings["sfx_volume"]
+
+
+def set_sfx_volume(volume):
+    _settings["sfx_volume"] = max(0.0, min(1.0, volume))
+    _save_settings()
+
+
+def is_muted():
+    return _settings["muted"]
+
+
+def toggle_mute():
+    _settings["muted"] = not _settings["muted"]
+    if _PYGAME_AVAILABLE and _initialized:
+        try:
+            pygame.mixer.music.set_volume(_effective_music_volume())
+        except Exception as e:
+            print(f"[audio] Could not update volume after mute toggle: {e}")
+    _save_settings()
+    return _settings["muted"]
