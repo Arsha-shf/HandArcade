@@ -13,11 +13,13 @@ letterboxed via engine.camera.show() -- see engine/camera.py for why
 those two are handled together instead of with a plain cv2.imshow().
 
 Controls on the menu:
-    1-4     -> launch that game
-    q       -> quit the app
-    m       -> toggle mute
-    -  / =  -> music volume down / up
-    [  / ]  -> sfx volume down / up
+    1-4         -> launch that game
+    click card  -> launch that game
+    q           -> quit the app
+    m / click   -> toggle mute (click the "Sound ON/MUTED" label)
+    -  / =      -> music volume down / up
+    [  / ]      -> sfx volume down / up
+    drag bar    -> set music/sfx volume directly
 
 Contract each game's run_xxx() must follow:
     run_xxx(cap, tracker) -> str | None
@@ -27,6 +29,12 @@ Contract each game's run_xxx() must follow:
         - Should display via engine.camera.show(WINDOW_NAME, frame), not
           cv2.imshow directly, or it won't get the fullscreen/letterbox
           treatment set up here.
+
+The menu got big enough to split by concern:
+    engine/menu_state.py  -- shared MenuState + color palette
+    engine/menu_input.py  -- mouse callback + coordinate mapping + hit-testing
+    engine/menu_draw.py   -- everything drawn on screen
+    engine/menu.py (here) -- game list, keyboard handling, the main loop
 """
 
 import cv2
@@ -35,13 +43,15 @@ from engine.audio import (
     get_music_volume,
     get_sfx_volume,
     init_audio,
-    is_muted,
     play_music,
     set_music_volume,
     set_sfx_volume,
     toggle_mute,
 )
 from engine.camera import init_fullscreen_window, open_camera, show
+from engine.menu_draw import draw_menu
+from engine.menu_input import game_at, make_mouse_callback, window_to_frame_coords
+from engine.menu_state import MenuState, point_in_rect
 from engine.tracking import HandTracker
 from engine.transitions import fade_in, fade_out
 from games.catch import run_catch
@@ -61,49 +71,6 @@ WINDOW_NAME = "HandArcade"
 ARCADE_MUSIC = "assets/music/arcade_theme.mp3"
 
 VOLUME_STEP = 0.05
-
-
-def _draw_menu(frame):
-    cv2.putText(frame, "HandArcade", (20, 50),
-                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
-    cv2.putText(frame, "Press a number to play  -  'q' to quit", (20, 85),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
-
-    start_y = 150
-    line_height = 45
-    for i, (name, _) in enumerate(GAMES):
-        y = start_y + i * line_height
-        cv2.putText(frame, f"{i + 1}. {name}", (40, y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 255), 2)
-
-    _draw_audio_controls(frame)
-
-
-def _draw_audio_controls(frame):
-    h, w = frame.shape[:2]
-
-    mute_text = "MUTED (m to unmute)" if is_muted() else "Sound ON (m to mute)"
-    mute_color = (0, 0, 255) if is_muted() else (0, 220, 0)
-    cv2.putText(frame, mute_text, (20, h - 90),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, mute_color, 1, cv2.LINE_AA)
-
-    music_pct = int(round(get_music_volume() * 100))
-    sfx_pct = int(round(get_sfx_volume() * 100))
-
-    cv2.putText(frame, f"Music: {music_pct:3d}%   ( - / = )", (20, h - 60),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1, cv2.LINE_AA)
-    cv2.putText(frame, f"SFX:   {sfx_pct:3d}%   ( [ / ] )", (20, h - 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.55, (200, 200, 200), 1, cv2.LINE_AA)
-
-    _draw_volume_bar(frame, 220, h - 68, music_pct)
-    _draw_volume_bar(frame, 220, h - 38, sfx_pct)
-
-
-def _draw_volume_bar(frame, x, y, pct, width=100, height=12):
-    cv2.rectangle(frame, (x, y), (x + width, y + height), (80, 80, 80), 1)
-    fill_w = int(width * max(0, min(100, pct)) / 100)
-    if fill_w > 0:
-        cv2.rectangle(frame, (x, y), (x + fill_w, y + height), (0, 200, 255), -1)
 
 
 def _handle_audio_key(key):
@@ -126,11 +93,13 @@ def _handle_audio_key(key):
     return False
 
 
-def _show_menu_loop(cap):
+def _show_menu_loop(cap, state):
     """
-    Display the menu until the player picks a game (1-4) or quits ('q').
-    Returns an int 0-3 (index into GAMES) or the string "quit".
+    Display the menu until the player picks a game (via key or click) or
+    quits ('q'). Returns an int 0-3 (index into GAMES) or the string "quit".
     """
+    state.reset_for_new_session()
+
     while True:
         success, frame = cap.read()
         if not success:
@@ -138,8 +107,18 @@ def _show_menu_loop(cap):
             return "quit"
 
         frame = cv2.flip(frame, 1)
-        _draw_menu(frame)
+        draw_menu(WINDOW_NAME, frame, state, GAMES)
         show(WINDOW_NAME, frame)
+
+        if state.mouse_click_pending:
+            state.mouse_click_pending = False
+            fx, fy = window_to_frame_coords(WINDOW_NAME, *state.mouse_pos, *state.frame_size)
+            if state.mute_rect is not None and point_in_rect(fx, fy, state.mute_rect):
+                toggle_mute()
+            else:
+                idx = game_at(state, fx, fy)
+                if idx is not None:
+                    return idx
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
@@ -157,15 +136,17 @@ def run_menu():
         return
 
     init_fullscreen_window(WINDOW_NAME)
+    state = MenuState()
+    cv2.setMouseCallback(WINDOW_NAME, make_mouse_callback(WINDOW_NAME, state))
     init_audio()
     play_music(ARCADE_MUSIC)
 
-    print("HandArcade menu running. Press 1-4 to play, 'q' to quit.")
+    print("HandArcade menu running. Press 1-4 (or click a card) to play, 'q' to quit.")
 
     with HandTracker(max_num_hands=2) as tracker:
         try:
             while True:
-                choice = _show_menu_loop(cap)
+                choice = _show_menu_loop(cap, state)
                 if choice == "quit":
                     break
 
