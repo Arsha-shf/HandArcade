@@ -1,33 +1,47 @@
 # handarcade.spec
 #
 # Build with:  pyinstaller handarcade.spec
-# Output lands in dist/HandArcade/ (onedir build -- MUCH more reliable than
-# --onefile for apps using mediapipe/opencv, since those bundle native
-# libs + data files that --onefile's runtime unpacking often trips over).
+# Output lands in dist/HandArcade/ (onedir build: more reliable than
+# --onefile for mediapipe/opencv).
 #
-# NOTE: update the `datas` list below to match your actual asset folder
-# names (sprite PNGs, sound .wav files, any per-game config/data files).
-# Anything a game loads via a relative path (e.g. "assets/apple.png")
-# needs an entry here, or it'll be missing in the packaged app.
+# Run it from the project root (paths below are relative to this file).
 
-import mediapipe
+import os
+
 from PyInstaller.utils.hooks import collect_data_files
 
 block_cipher = None
 
-# MediaPipe ships model files (.tflite etc.) as package data -- these are
-# NOT picked up automatically and the app will crash on HandTracker init
-# without them.
+# MediaPipe ships its own package data; not picked up automatically.
 mediapipe_datas = collect_data_files("mediapipe")
 
+
+def _require(src, dest):
+    """Must exist: fail the build with a clear message instead of shipping a
+    broken app."""
+    if not os.path.exists(src):
+        raise SystemExit(f"[spec] Required path missing: {src}")
+    return (src, dest)
+
+
+def _optional(src, dest):
+    """Include only if it exists (PyInstaller aborts on a missing source)."""
+    if os.path.exists(src):
+        return [(src, dest)]
+    print(f"[spec] Skipping missing optional folder: {src}")
+    return []
+
+
 datas = mediapipe_datas + [
-    # (source, destination-folder-in-bundle)
-    ("assets", "assets"),                      # top-level shared assets, if any
-    ("games/fruit_slice/assets", "games/fruit_slice/assets"),
-    ("games/dodge/assets", "games/dodge/assets"),
-    ("games/catch/assets", "games/catch/assets"),
-    ("games/pinch_pop/assets", "games/pinch_pop/assets"),
+    # Destinations mirror the project layout, because engine/paths.py resolves
+    # relative paths against the bundle root.
+    _require("engine/models", "engine/models"),   # hand_landmarker.task, face_landmarker.task
+    _require("assets", "assets"),                  # sprites, sounds, music
 ]
+
+# Per-game asset folders, only if they exist.
+for game in ("fruit_slice", "dodge", "catch", "pinch_pop"):
+    datas += _optional(f"games/{game}/assets", f"games/{game}/assets")
 
 hidden_imports = [
     "cv2",
@@ -38,7 +52,7 @@ hidden_imports = [
 
 a = Analysis(
     ["main.py"],
-    pathex=[],
+    pathex=["."],
     binaries=[],
     datas=datas,
     hiddenimports=hidden_imports,
@@ -63,10 +77,9 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    console=False,  # no terminal window; set True temporarily if you need
-                     # to see print()/error output while debugging the build
-    icon=None,       # e.g. "assets/icon.ico" if you have one
+    upx=False,        # UPX can corrupt opencv/mediapipe native libs
+    console=True,     # keep True until the build works; then switch to False
+    icon=None,
 )
 
 coll = COLLECT(
@@ -75,7 +88,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name="HandArcade",
 )

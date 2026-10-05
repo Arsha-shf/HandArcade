@@ -23,18 +23,19 @@ Usage:
 
 import math
 import os
+import time
 
 import cv2
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision as mp_vision
 
+from engine.paths import resource_path
+
 # Model file downloaded once via:
 #   wget -O engine/models/hand_landmarker.task \
 #     https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
-_DEFAULT_MODEL_PATH = os.path.join(
-    os.path.dirname(__file__), "models", "hand_landmarker.task"
-)
+_DEFAULT_MODEL_PATH = resource_path("engine", "models", "hand_landmarker.task")
 
 # Landmark indices (standard 21-point hand topology, unchanged from the
 # legacy API's mp_hands.HandLandmark enum values).
@@ -131,7 +132,7 @@ class HandTracker:
             min_tracking_confidence=min_tracking_confidence,
         )
         self._landmarker = mp_vision.HandLandmarker.create_from_options(options)
-        self._frame_count = 0
+        self._last_ts_ms = -1
 
     def process(self, frame_bgr):
         """
@@ -145,8 +146,13 @@ class HandTracker:
         if self._static_image_mode:
             result = self._landmarker.detect(mp_image)
         else:
-            self._frame_count += 1  # just needs to be monotonically increasing
-            result = self._landmarker.detect_for_video(mp_image, self._frame_count)
+            # Real wall-clock ms: the model's temporal tracking/smoothing assumes
+            # timestamps are milliseconds. Must be strictly increasing.
+            ts_ms = int(time.monotonic() * 1000)
+            if ts_ms <= self._last_ts_ms:
+                ts_ms = self._last_ts_ms + 1
+            self._last_ts_ms = ts_ms
+            result = self._landmarker.detect_for_video(mp_image, ts_ms)
 
         return _ResultsProxy(result)
 

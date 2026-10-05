@@ -7,13 +7,8 @@ Opens the webcam and HandTracker ONCE here, then shares them with whichever
 game is launched, so we don't reopen the camera every time the player
 bounces between the menu and a game.
 
-Camera is opened via engine.camera.open_camera(), which grabs the highest
-resolution the device actually supports, and the window is fullscreen +
-letterboxed via engine.camera.show() -- see engine/camera.py for why
-those two are handled together instead of with a plain cv2.imshow().
-
 Controls on the menu:
-    1-4         -> launch that game
+    1-N         -> launch that game (N = number of games)
     click card  -> launch that game
     q           -> quit the app
     m / click   -> toggle mute (click the "Sound ON/MUTED" label)
@@ -26,16 +21,18 @@ Contract each game's run_xxx() must follow:
         - Runs its own loop, reading frames from `cap` and using `tracker`.
         - Return "quit" to exit the whole app.
         - Return anything else (e.g. "menu" or None) to go back to the menu.
-        - Should display via engine.camera.show(WINDOW_NAME, frame), not
-          cv2.imshow directly, or it won't get the fullscreen/letterbox
-          treatment set up here.
+        - Display via engine.camera.show(WINDOW_NAME, frame), not
+          cv2.imshow directly.
+        - If it raises, the traceback is printed and you land back on the menu.
 
-The menu got big enough to split by concern:
+Module layout:
     engine/menu_state.py  -- shared MenuState + color palette
     engine/menu_input.py  -- mouse callback + coordinate mapping + hit-testing
     engine/menu_draw.py   -- everything drawn on screen
     engine/menu.py (here) -- game list, keyboard handling, the main loop
 """
+
+import traceback
 
 import cv2
 
@@ -59,7 +56,7 @@ from games.dodge import run_dodge
 from games.fruit_slice import run_fruit_slice
 from games.pinch_pop import run_pinch_pop
 
-# Ordered so list index + 1 == the number key that launches it (1-4)
+# Ordered so list index + 1 == the number key that launches it
 GAMES = [
     ("Fruit Slice", run_fruit_slice),
     ("Dodge", run_dodge),
@@ -68,6 +65,7 @@ GAMES = [
 ]
 
 WINDOW_NAME = "HandArcade"
+# Relative to the project root (engine.audio resolves it), NOT the cwd.
 ARCADE_MUSIC = "assets/music/arcade_theme.mp3"
 
 VOLUME_STEP = 0.05
@@ -95,8 +93,8 @@ def _handle_audio_key(key):
 
 def _show_menu_loop(cap, state):
     """
-    Display the menu until the player picks a game (via key or click) or
-    quits ('q'). Returns an int 0-3 (index into GAMES) or the string "quit".
+    Display the menu until the player picks a game (key or click) or quits.
+    Returns an int (index into GAMES) or the string "quit".
     """
     state.reset_for_new_session()
 
@@ -123,8 +121,8 @@ def _show_menu_loop(cap, state):
         key = cv2.waitKey(1) & 0xFF
         if key == ord("q"):
             return "quit"
-        if key in (ord("1"), ord("2"), ord("3"), ord("4")):
-            return int(chr(key)) - 1
+        if ord("1") <= key < ord("1") + len(GAMES):
+            return key - ord("1")
         _handle_audio_key(key)
 
 
@@ -141,7 +139,7 @@ def run_menu():
     init_audio()
     play_music(ARCADE_MUSIC)
 
-    print("HandArcade menu running. Press 1-4 (or click a card) to play, 'q' to quit.")
+    print(f"HandArcade menu running. Press 1-{len(GAMES)} (or click a card) to play, 'q' to quit.")
 
     with HandTracker(max_num_hands=2) as tracker:
         try:
@@ -154,12 +152,20 @@ def run_menu():
                 print(f"Launching {name}...")
 
                 fade_out(cap, WINDOW_NAME)
-                result = run_game(cap, tracker)
+                try:
+                    result = run_game(cap, tracker)
+                except Exception:
+                    # A bug in one game shouldn't kill the whole arcade.
+                    traceback.print_exc()
+                    result = None
                 fade_in(cap, WINDOW_NAME)
 
                 if result == "quit":
                     break
-                # any other return value (e.g. "menu"/None) just loops back
+
+                # No-op if the arcade theme is still playing; restarts it if a
+                # game stopped or replaced the music.
+                play_music(ARCADE_MUSIC)
         finally:
             cap.release()
             cv2.destroyAllWindows()

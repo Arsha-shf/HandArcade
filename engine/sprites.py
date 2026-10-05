@@ -3,15 +3,26 @@ engine/sprites.py
 
 PNG overlay system shared by every HandArcade game.
 
-Loads transparent PNGs (e.g. art drawn on iPad) and draws them onto a live
-BGR camera frame with proper alpha blending, so edges look clean instead
-of boxy.
+Loads transparent PNGs and draws them onto a live BGR camera frame with
+proper alpha blending.
 
 Usage:
     from engine.sprites import draw_sprite
 
     draw_sprite(frame, "assets/apple.png", x=300, y=150, scale=1.0)
     draw_sprite(frame, "assets/apple.png", x=300, y=150, scale=1.5, angle=30)
+
+Implementation notes
+--------------------
+* Two caches. `_base_cache` holds each PNG once (decoded from disk once,
+  ever). `_sprite_cache` holds resized+rotated variants and is an LRU.
+  Before, every new (scale, angle) variant re-read the PNG from disk.
+* Sprites are stored PREMULTIPLIED (color already multiplied by alpha).
+  Resizing/rotating premultiplied pixels is the mathematically correct way
+  to filter transparent images; it removes the dark halo that appears on
+  rotated edges. Blending then needs one multiply instead of two.
+* Blend runs in float32 (not float64): half the memory traffic.
+* angle is CLOCKWISE degrees, as documented.
 """
 
 from collections import OrderedDict
@@ -19,103 +30,72 @@ from collections import OrderedDict
 import cv2
 import numpy as np
 
-# Cache of loaded sprite images, keyed by (path, scale, angle) so we never
-# hit disk or redo a resize/rotation more than once per unique variant.
-#
-# Two things matter here that aren't obvious from a plain dict:
-#
-# 1. ANGLE_BUCKET_DEG: sprites that spin continuously (falling fruit, etc.)
-#    change angle by a few degrees every frame. If the cache key rounds to
-#    0.1 degree, it NEVER hits in practice -- you're doing a full resize +
-#    warpAffine every single frame for every spinning sprite, which is the
-#    actual cost you're seeing, not "the PNG is slow". Rounding to the
-#    nearest ANGLE_BUCKET_DEG degrees means a full spin only ever produces
-#    360 / ANGLE_BUCKET_DEG distinct cached rotations, reused every time
-#    the sprite swings back through that bucket. 5 degrees is visually
-#    indistinguishable from continuous rotation at normal spin speeds but
-#    cuts cache misses by ~40-50x vs 0.1 degree rounding.
-#
-# 2. _MAX_CACHE_ENTRIES + OrderedDict as LRU: the old dict never evicted
-#    anything, so over a long play session (menu loop, multiple games,
-#    many unique scale/angle combos) this grows forever -- a plain memory
-#    leak. Capping it with LRU eviction keeps memory flat regardless of
-#    session length.
-ANGLE_BUCKET_DEG = 15
+from engine.paths import resolve
+
+# Rotation is snapped to this many degrees so a continuously spinning sprite
+# reuses cached rotations. 5 deg -> 72 variants per (sprite, scale): looks
+# continuous, and 72 x 3 sprites x a few scales stays well under the cap.
+ANGLE_BUCKET_DEG = 5
 _MAX_CACHE_ENTRIES = 1500
-_sprite_cache = OrderedDict()
+
+_base_cache = {}                 # path -> premultiplied BGRA uint8
+_sprite_cache = OrderedDict()    # (path, scale, angle) -> premultiplied BGRA uint8
 
 
 def _load_sprite(path):
     """
-    Load a PNG with its alpha channel intact.
-    Returns a BGRA numpy array. Raises FileNotFoundError if the path is bad,
-    since a silently-missing sprite is worse than a loud crash while developing.
+    Load a PNG once and return it as premultiplied BGRA uint8.
+    Raises FileNotFoundError if the path is bad: a silently-missing sprite is
+    worse than a loud crash while developing.
     """
-    image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    cached = _base_cache.get(path)
+    if cached is not None:
+        return cached
 
+    image = cv2.imread(resolve(path), cv2.IMREAD_UNCHANGED)
     if image is None:
         raise FileNotFoundError(f"Could not load sprite: {path}")
 
-    # If the PNG has no alpha channel (e.g. someone exported as JPG-like PNG),
-    # add a fully-opaque one so the rest of the pipeline works unchanged.
-    if image.shape[2] == 3:
-        alpha = np.full(image.shape[:2], 255, dtype=image.dtype)
-        image = cv2.merge((image[:, :, 0], image[:, :, 1], image[:, :, 2], alpha))
+    if image.dtype != np.uint8:  # e.g. 16-bit PNG
+        image = cv2.convertScaleAbs(image, alpha=255.0 / np.iinfo(image.dtype).max)
 
-    return image
+    if image.ndim == 2:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGRA)
+    elif image.shape[2] == 3:
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2BGRA)  # adds opaque alpha
+
+    alpha = image[:, :, 3:4].astype(np.float32) * (1.0 / 255.0)
+    premult = image.copy()
+    premult[:, :, :3] = (image[:, :, :3].astype(np.float32) * alpha + 0.5).astype(np.uint8)
+
+    _base_cache[path] = premult
+    return premult
 
 
 def _quantize_angle(angle):
-    """Snap angle to the nearest ANGLE_BUCKET_DEG so continuously-spinning
-    sprites actually reuse cached rotations instead of missing every frame."""
     return (round(angle / ANGLE_BUCKET_DEG) * ANGLE_BUCKET_DEG) % 360
 
 
-def _get_cached_sprite(path, scale, angle):
-    """Return a (possibly cached) resized + rotated BGRA sprite."""
-    cache_key = (path, round(scale, 3), _quantize_angle(angle))
-
-    if cache_key in _sprite_cache:
-        # LRU touch: move to the end (most recently used)
-        _sprite_cache.move_to_end(cache_key)
-        return _sprite_cache[cache_key]
-
-    sprite = _load_sprite(path)
-
-    if scale != 1.0:
-        new_w = max(1, int(sprite.shape[1] * scale))
-        new_h = max(1, int(sprite.shape[0] * scale))
-        sprite = cv2.resize(sprite, (new_w, new_h), interpolation=cv2.INTER_AREA)
-
-    if cache_key[2] != 0.0:
-        sprite = _rotate_sprite(sprite, cache_key[2])
-
-    _sprite_cache[cache_key] = sprite
-    if len(_sprite_cache) > _MAX_CACHE_ENTRIES:
-        _sprite_cache.popitem(last=False)  # evict least-recently-used
-
-    return sprite
-
-
-def _rotate_sprite(sprite, angle):
-    """Rotate a BGRA sprite around its center, expanding the canvas so nothing gets cropped."""
+def _rotate_sprite(sprite, angle_cw):
+    """Rotate a BGRA sprite clockwise around its center, expanding the canvas
+    so nothing gets cropped. (cv2's positive angle is counter-clockwise, hence
+    the minus.)"""
     h, w = sprite.shape[:2]
     center = (w / 2, h / 2)
 
-    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+    matrix = cv2.getRotationMatrix2D(center, -angle_cw, 1.0)
 
-    # Expand canvas to fit the rotated bounding box
-    cos = abs(rotation_matrix[0, 0])
-    sin = abs(rotation_matrix[0, 1])
+    cos = abs(matrix[0, 0])
+    sin = abs(matrix[0, 1])
     new_w = int(h * sin + w * cos)
     new_h = int(h * cos + w * sin)
 
-    rotation_matrix[0, 2] += (new_w / 2) - center[0]
-    rotation_matrix[1, 2] += (new_h / 2) - center[1]
+    matrix[0, 2] += (new_w / 2) - center[0]
+    matrix[1, 2] += (new_h / 2) - center[1]
 
     return cv2.warpAffine(
         sprite,
-        rotation_matrix,
+        matrix,
         (new_w, new_h),
         flags=cv2.INTER_LINEAR,
         borderMode=cv2.BORDER_CONSTANT,
@@ -123,22 +103,47 @@ def _rotate_sprite(sprite, angle):
     )
 
 
+def _get_cached_sprite(path, scale, angle):
+    """Return a (possibly cached) resized + rotated premultiplied BGRA sprite."""
+    angle_q = _quantize_angle(angle)
+    key = (path, round(scale, 3), angle_q)
+
+    sprite = _sprite_cache.get(key)
+    if sprite is not None:
+        _sprite_cache.move_to_end(key)
+        return sprite
+
+    sprite = _load_sprite(path)
+
+    if scale != 1.0:
+        new_w = max(1, int(sprite.shape[1] * scale))
+        new_h = max(1, int(sprite.shape[0] * scale))
+        interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+        sprite = cv2.resize(sprite, (new_w, new_h), interpolation=interp)
+
+    if angle_q != 0:
+        sprite = _rotate_sprite(sprite, angle_q)
+
+    _sprite_cache[key] = sprite
+    if len(_sprite_cache) > _MAX_CACHE_ENTRIES:
+        _sprite_cache.popitem(last=False)
+
+    return sprite
+
+
 def draw_sprite(frame, png_path, x, y, scale=1.0, angle=0.0, anchor="center"):
     """
     Draw a transparent PNG onto a BGR frame at (x, y) with alpha blending.
 
     Args:
-        frame: the BGR camera frame (numpy array), modified in place.
-        png_path: path to a transparent PNG.
+        frame: BGR uint8 camera frame, modified in place.
+        png_path: path to a transparent PNG (relative = project root).
         x, y: position in pixels on the frame.
         scale: resize multiplier (1.0 = original size).
-        angle: rotation in degrees, clockwise.
-        anchor: "center" (default) places (x, y) at the sprite's center,
-                which is usually what you want for falling fruit/bubbles/etc.
-                "topleft" places (x, y) at the sprite's top-left corner.
+        angle: rotation in degrees, CLOCKWISE.
+        anchor: "center" or "topleft".
 
-    Sprites that fall fully or partially outside the frame are clipped
-    safely (no crash, no wraparound).
+    Sprites partially or fully outside the frame are clipped safely.
     """
     sprite = _get_cached_sprite(png_path, scale, angle)
     sprite_h, sprite_w = sprite.shape[:2]
@@ -153,63 +158,42 @@ def draw_sprite(frame, png_path, x, y, scale=1.0, angle=0.0, anchor="center"):
 
     frame_h, frame_w = frame.shape[:2]
 
-    # Clip the region so we only ever write inside the frame's bounds
-    frame_x1, frame_y1 = max(x, 0), max(y, 0)
-    frame_x2, frame_y2 = min(x + sprite_w, frame_w), min(y + sprite_h, frame_h)
+    fx1, fy1 = max(x, 0), max(y, 0)
+    fx2, fy2 = min(x + sprite_w, frame_w), min(y + sprite_h, frame_h)
+    if fx1 >= fx2 or fy1 >= fy2:
+        return
 
-    if frame_x1 >= frame_x2 or frame_y1 >= frame_y2:
-        return  # Sprite is entirely off-frame, nothing to draw
+    sx1, sy1 = fx1 - x, fy1 - y
+    sx2, sy2 = sx1 + (fx2 - fx1), sy1 + (fy2 - fy1)
 
-    sprite_x1, sprite_y1 = frame_x1 - x, frame_y1 - y
-    sprite_x2, sprite_y2 = sprite_x1 + (frame_x2 - frame_x1), sprite_y1 + (frame_y2 - frame_y1)
+    region = sprite[sy1:sy2, sx1:sx2]
+    dst = frame[fy1:fy2, fx1:fx2]
 
-    sprite_region = sprite[sprite_y1:sprite_y2, sprite_x1:sprite_x2]
-    frame_region = frame[frame_y1:frame_y2, frame_x1:frame_x2]
-
-    alpha = sprite_region[:, :, 3:4].astype(float) / 255.0
-    sprite_rgb = sprite_region[:, :, :3].astype(float)
-    frame_rgb = frame_region.astype(float)
-
-    blended = alpha * sprite_rgb + (1 - alpha) * frame_rgb
-    frame[frame_y1:frame_y2, frame_x1:frame_x2] = blended.astype(np.uint8)
+    # premultiplied "over":  out = src_premult + dst * (1 - alpha)
+    inv_alpha = 1.0 - region[:, :, 3:4].astype(np.float32) * (1.0 / 255.0)
+    out = dst.astype(np.float32) * inv_alpha + region[:, :, :3]
+    dst[:] = out.astype(np.uint8)
 
 
 def get_sprite_size(png_path, scale=1.0):
-    """Return (width, height) in pixels for a sprite at a given scale, useful for collision math."""
+    """(width, height) in pixels of the unrotated sprite at a given scale."""
     sprite = _get_cached_sprite(png_path, scale, 0.0)
     h, w = sprite.shape[:2]
     return w, h
 
 
 def clear_sprite_cache():
-    """Free cached sprite images. Call this when leaving a game screen so a
-    long HandArcade session (menu <-> multiple games) doesn't accumulate
-    stale entries from games you're no longer playing."""
+    """Free all cached sprites (variants and decoded originals)."""
     _sprite_cache.clear()
+    _base_cache.clear()
 
 
 def preload_variants(png_path, scales, angle_step=ANGLE_BUCKET_DEG):
     """
-    Precompute and cache every (scale, angle-bucket) rotation for a sprite
-    up front, so nothing during the render loop ever has to resize/rotate --
-    that on-demand resize/rotate is what causes the frame hitch the instant
-    a new combo (e.g. a fruit spawning with a scale the cache hasn't built
-    yet) shows up on screen.
-
-    Call this once at game/module load time, NOT inside the render loop,
-    for every (sprite_path, scale) pair the game will ever actually draw.
-    Silently no-ops if the file doesn't exist yet (runtime falls back to
-    the placeholder circle as usual).
-
-    Args:
-        png_path: path to the sprite.
-        scales: iterable of scale values you'll actually use at draw time
-                (must match what you pass to draw_sprite exactly, since the
-                cache key rounds to 3 decimals -- pass the real numbers,
-                not approximations).
-        angle_step: degrees between cached rotations. Must match
-                    ANGLE_BUCKET_DEG (the default) or draw-time cache
-                    lookups won't line up with what you preloaded.
+    Precompute every (scale, angle-bucket) variant up front so nothing in the
+    render loop ever resizes/rotates. Call once at game load, not per frame.
+    Pass the exact scale values you will use in draw_sprite. Silently no-ops
+    if the file doesn't exist (the game falls back to its placeholder).
     """
     try:
         for angle in range(0, 360, angle_step):

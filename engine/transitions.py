@@ -23,9 +23,7 @@ _STEP_DELAY_MS = 15  # ms per step -> ~150ms total fade, feels snappy not sluggi
 
 def _blend_to_black(frame, alpha):
     """alpha=0 -> original frame, alpha=1 -> fully black."""
-    black = frame.copy()
-    black[:] = 0
-    return cv2.addWeighted(frame, 1 - alpha, black, alpha, 0)
+    return cv2.convertScaleAbs(frame, alpha=1 - alpha)
 
 
 def fade_out(cap, window_name, steps=_STEPS, delay_ms=_STEP_DELAY_MS):

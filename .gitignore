@@ -4,4 +4,8 @@ __pycache__/
 .DS_Store
 .vscode/
 .idea/
-*.egg-info/
+*.egg-info/__pycache__/
+*.pyc
+.ruff_cache/
+dist/
+build/

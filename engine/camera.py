@@ -1,78 +1,82 @@
 """
 engine/camera.py
 
-Camera setup + display for HandArcade: opens the webcam at the highest
-resolution/FPS it actually supports, keeps capture latency low, and
-handles fullscreen display -- all in one place so the menu and every
-game get the same behavior without duplicating this logic five times.
+Camera setup + display for HandArcade.
 
-Two requirements that fight each other, solved here:
-  1. "Full screen, best resolution" -> big frames.
-  2. "Very very smooth"            -> MediaPipe inference has to run on
-     SMALL frames, or tracking becomes the bottleneck, not the camera.
+Two requirements that fight each other:
+  1. Sharp, fullscreen display.
+  2. Smooth: MediaPipe must run on SMALL frames.
 
-The fix: capture and DISPLAY at full resolution, but feed the tracker a
-downscaled COPY of each frame. MediaPipe's landmark output is already
-normalized (0.0-1.0), so converting it back to pixels against the
-full-res frame costs nothing -- see engine/tracking.py's
-get_palm_center(landmarks, frame.shape) and the equivalents in
-engine/head_tracking.py. Nothing in those files needs to change. This
-file just gives every game loop the two frames it needs.
+Solution: capture and display at full camera resolution, but feed the
+tracker a downscaled COPY (same aspect ratio). MediaPipe returns
+normalized landmarks (0-1), so converting them with the full-res
+frame.shape gives accurate full-res pixels at no extra cost.
 
-Usage in a game loop (see games/catch/game.py for a full example):
+Display rule (important): show() scales the frame to FIT the window and
+centers it with black bars. It never crops and never stretches. That is
+exactly the mapping engine/menu_input.window_to_frame_coords() assumes,
+so frame coordinates == what you see, for any camera aspect ratio.
 
-    from engine.camera import open_camera, to_tracking_frame, show
+Usage in a game loop:
 
-    cap = open_camera()                        # once, in menu.py
-    ...
-    success, frame = cap.read()                # full res, for display + hit-testing
+    cap = open_camera()
+    success, frame = cap.read()
     frame = cv2.flip(frame, 1)
-    small = to_tracking_frame(frame)            # small, cheap copy
-    results = tracker.process(small)            # fast
-    px, py = get_palm_center(hand_landmarks, frame.shape)   # accurate, full-res pixels
-    ...
-    show(WINDOW_NAME, frame)                    # fullscreen, letterboxed, not stretched
+    small = to_tracking_frame(frame)
+    results = tracker.process(small)
+    px, py = get_palm_center(hand_landmarks, frame.shape)
+    show(WINDOW_NAME, frame)
 """
 
 import cv2
 
-TRACKING_SIZE = (640, 360)
+TRACKING_WIDTH = 640
 
+# Legacy names kept so older imports don't break. Not used by this module.
+TRACKING_SIZE = (640, 360)
 DISPLAY_SIZE = (1920, 1080)
 
-_SCREEN_SIZE = None
+# Capped at 1080p on purpose: every frame is flipped, drawn on, blended and
+# resized in Python. At 1440p/4K that costs more than the tracker does and
+# the camera usually drops its FPS at those sizes anyway.
+_CANDIDATE_RESOLUTIONS = [
+    (1920, 1080),
+    (1280, 720),
+    (640, 480),
+]
+
+_screen_size = None
 
 
-def _detect_screen_resolution():
+def _get_screen_size():
+    """Fallback only (used when the window size can't be queried). Lazy, so
+    tkinter is never imported unless really needed."""
+    global _screen_size
+    if _screen_size is not None:
+        return _screen_size
+
     try:
         import tkinter as tk
+
         root = tk.Tk()
         root.withdraw()
-        w, h = root.winfo_screenwidth(), root.winfo_screenheight()
+        _screen_size = (root.winfo_screenwidth(), root.winfo_screenheight())
         root.destroy()
-        return w, h
+        return _screen_size
     except Exception:
         pass
 
     try:
         import screeninfo
+
         m = screeninfo.get_monitors()[0]
-        return m.width, m.height
+        _screen_size = (m.width, m.height)
+        return _screen_size
     except Exception:
         pass
 
-    print("Could not detect screen resolution (no tkinter/screeninfo available); "
-          "falling back to no letterboxing -- install python3-tk or `pip install "
-          "screeninfo` if fullscreen still looks stretched.")
-    return DISPLAY_SIZE
-
-_CANDIDATE_RESOLUTIONS = [
-    (3840, 2160),
-    (2560, 1440),
-    (1920, 1080),
-    (1280, 720),
-    (640, 480),
-]
+    _screen_size = DISPLAY_SIZE
+    return _screen_size
 
 
 def open_camera(index=0, target_fps=60):
@@ -82,9 +86,7 @@ def open_camera(index=0, target_fps=60):
 
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-    cap.set(cv2.CAP_PROP_FPS, target_fps)
 
-    actual_w, actual_h = 640, 480
     for w, h in _CANDIDATE_RESOLUTIONS:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, w)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, h)
@@ -93,54 +95,64 @@ def open_camera(index=0, target_fps=60):
         if actual_w >= w and actual_h >= h:
             break
 
+    # FPS after resolution: some drivers reset FPS when the mode changes.
+    cap.set(cv2.CAP_PROP_FPS, target_fps)
+
+    actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     actual_fps = cap.get(cv2.CAP_PROP_FPS)
     print(f"Camera opened at {actual_w}x{actual_h} @ {actual_fps:.0f}fps "
-          f"(tracking runs at {TRACKING_SIZE[0]}x{TRACKING_SIZE[1]})")
+          f"(tracking runs at {TRACKING_WIDTH}px wide)")
     return cap
 
 
 def to_tracking_frame(frame):
-    return cv2.resize(frame, TRACKING_SIZE, interpolation=cv2.INTER_LINEAR)
+    """Downscale for MediaPipe, KEEPING the aspect ratio. (A fixed 640x360
+    would squash a 4:3 camera and distort the hand/face shape.)"""
+    h, w = frame.shape[:2]
+    if w <= TRACKING_WIDTH:
+        return frame
+    new_h = max(1, round(h * TRACKING_WIDTH / w))
+    return cv2.resize(frame, (TRACKING_WIDTH, new_h), interpolation=cv2.INTER_AREA)
 
 
 def init_fullscreen_window(window_name):
-    global _SCREEN_SIZE
-    _SCREEN_SIZE = _detect_screen_resolution()
-
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(window_name, DISPLAY_SIZE[0], DISPLAY_SIZE[1])
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
 
+def _target_size(window_name):
+    """Actual drawable size of the window (works fullscreen or windowed)."""
+    try:
+        _, _, w, h = cv2.getWindowImageRect(window_name)
+        if w > 0 and h > 0:
+            return w, h
+    except Exception:
+        pass
+    return _get_screen_size()
+
+
 def show(window_name, frame):
-    display_w, display_h = DISPLAY_SIZE
+    """Fit `frame` inside the window (preserve aspect, center, black bars)."""
+    target_w, target_h = _target_size(window_name)
     frame_h, frame_w = frame.shape[:2]
 
-    scale = max(display_w / frame_w, display_h / frame_h)
+    scale = min(target_w / frame_w, target_h / frame_h)
     new_w, new_h = max(1, int(frame_w * scale)), max(1, int(frame_h * scale))
-    resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
 
-    x0 = max(0, (new_w - display_w) // 2)
-    y0 = max(0, (new_h - display_h) // 2)
-    canvas = resized[y0:y0 + display_h, x0:x0 + display_w]
+    if (new_w, new_h) != (frame_w, frame_h):
+        interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+        frame = cv2.resize(frame, (new_w, new_h), interpolation=interp)
 
-    screen_w, screen_h = _SCREEN_SIZE if _SCREEN_SIZE is not None else DISPLAY_SIZE
-
-    if (screen_w, screen_h) != (display_w, display_h):
-        fit_scale = min(screen_w / display_w, screen_h / display_h)
-        fit_w = max(1, int(display_w * fit_scale))
-        fit_h = max(1, int(display_h * fit_scale))
-        fitted = cv2.resize(canvas, (fit_w, fit_h), interpolation=cv2.INTER_LINEAR)
-
-        letterboxed = cv2.copyMakeBorder(
-            fitted,
-            top=(screen_h - fit_h) // 2,
-            bottom=screen_h - fit_h - (screen_h - fit_h) // 2,
-            left=(screen_w - fit_w) // 2,
-            right=screen_w - fit_w - (screen_w - fit_w) // 2,
-            borderType=cv2.BORDER_CONSTANT,
+    if (new_w, new_h) != (target_w, target_h):
+        top = (target_h - new_h) // 2
+        left = (target_w - new_w) // 2
+        frame = cv2.copyMakeBorder(
+            frame,
+            top, target_h - new_h - top,
+            left, target_w - new_w - left,
+            cv2.BORDER_CONSTANT,
             value=(0, 0, 0),
         )
-        canvas = letterboxed
 
-    cv2.imshow(window_name, canvas)
+    cv2.imshow(window_name, frame)

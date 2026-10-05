@@ -7,9 +7,13 @@ staggered entrance animation and hover glow), the audio control panel, and
 the custom cursor.
 
 Everything here is a function of the current frame plus the shared
-MenuState (see engine/menu_state.py); drawing functions don't hold their
-own state, though draw_game_cards and draw_audio_controls write hit-test
-rects back into `state` so engine/menu_input.py can use them next frame.
+MenuState (see engine/menu_state.py). draw_game_cards and
+draw_audio_controls write hit-test rects back into `state` so
+engine/menu_input.py can use them next frame.
+
+Performance: alpha blending only touches the small region it draws in
+(ROI). The old version copied the ENTIRE frame for every panel and for the
+particles, which at 1080p is ~8 full-frame copies per menu frame.
 """
 
 import time
@@ -62,12 +66,22 @@ def rounded_rect(img, pt1, pt2, radius, color, thickness=-1):
 
 def draw_panel(frame, pt1, pt2, radius=14, color=PANEL_BG, alpha=0.55,
                border_color=None, border_thickness=1):
-    """Alpha-blended rounded panel, optionally with a thin border on top."""
-    overlay = frame.copy()
-    rounded_rect(overlay, pt1, pt2, radius, color, thickness=-1)
-    cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+    """Alpha-blended rounded panel, optionally with a thin border on top.
+    Only the panel's own region is copied/blended."""
+    h, w = frame.shape[:2]
+    x1, y1 = int(pt1[0]), int(pt1[1])
+    x2, y2 = int(pt2[0]), int(pt2[1])
+
+    rx1, ry1 = max(0, x1), max(0, y1)
+    rx2, ry2 = min(w, x2 + 1), min(h, y2 + 1)
+    if rx1 < rx2 and ry1 < ry2 and alpha > 0:
+        roi = frame[ry1:ry2, rx1:rx2]
+        layer = roi.copy()
+        rounded_rect(layer, (x1 - rx1, y1 - ry1), (x2 - rx1, y2 - ry1), radius, color, thickness=-1)
+        frame[ry1:ry2, rx1:rx2] = cv2.addWeighted(layer, alpha, roi, 1 - alpha, 0)
+
     if border_color is not None:
-        rounded_rect(frame, pt1, pt2, radius, border_color, thickness=border_thickness)
+        rounded_rect(frame, (x1, y1), (x2, y2), radius, border_color, thickness=border_thickness)
 
 
 def draw_text_shadow(frame, text, org, font=cv2.FONT_HERSHEY_SIMPLEX, scale=0.9,
@@ -83,18 +97,25 @@ def draw_text_shadow(frame, text, org, font=cv2.FONT_HERSHEY_SIMPLEX, scale=0.9,
 def draw_particles(frame, t):
     """Soft drifting specks behind everything else -- purely decorative."""
     h, w = frame.shape[:2]
-    overlay = frame.copy()
     n = 18
     for i in range(n):
         speed = 30 + (i % 5) * 14
         phase = i * 53.0
-        y = h - ((t * speed + phase) % (h + 40)) + 20
+        y = int(h - ((t * speed + phase) % (h + 40)) + 20)
         x = int(w * ((i * 0.61803398875) % 1.0))
         radius = 3 + (i % 4)
         mix = 0.5 + 0.5 * np.sin(t * 0.6 + i)
         color = (int(60 + 40 * mix), int(180 + 60 * mix), int(180 + 60 * (1 - mix)))
-        cv2.circle(overlay, (x, int(y)), radius, color, -1, cv2.LINE_AA)
-    cv2.addWeighted(overlay, 0.22, frame, 0.78, 0, frame)
+
+        r = radius + 1
+        x1, y1 = max(0, x - r), max(0, y - r)
+        x2, y2 = min(w, x + r + 1), min(h, y + r + 1)
+        if x1 >= x2 or y1 >= y2:
+            continue
+        roi = frame[y1:y2, x1:x2]
+        layer = roi.copy()
+        cv2.circle(layer, (x - x1, y - y1), radius, color, -1, cv2.LINE_AA)
+        frame[y1:y2, x1:x2] = cv2.addWeighted(layer, 0.22, roi, 0.78, 0)
 
 
 def draw_cursor(frame, pos):
@@ -115,9 +136,9 @@ def draw_menu(window_name, frame, state, games):
 
     draw_particles(frame, t)
 
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.35, frame, 0.65, 0, frame)
+    # darken the whole frame by 35% (same result as blending black at 0.35,
+    # but in place with no extra full-frame buffers)
+    cv2.convertScaleAbs(frame, dst=frame, alpha=0.65)
 
     hover = window_to_frame_coords(window_name, *state.mouse_pos, w, h)
 
