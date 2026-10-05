@@ -1,15 +1,17 @@
 WINDOW_NAME = "HandArcade"
 
+# --- Sizes: pixels for a 720px-tall frame; multiplied by ui_scale() at runtime
 PLAYER_RADIUS_MIN = 22
 PLAYER_RADIUS_MAX = 42
 PLAYER_Y_MARGIN_TOP = 70
 PLAYER_Y_MARGIN_BOTTOM = 40
-PLAYER_SMOOTHING_ALPHA = 0.5
+PLAYER_SMOOTHING_ALPHA = 0.5     # per 30fps-frame (see engine/smoothing.py)
 HITBOX_FORGIVENESS = 0.78
 
-HAND_SPAN_MIN = 60
-HAND_SPAN_MAX = 260
+HAND_SPAN_MIN = 60               # wrist -> middle-knuckle length (720p px) = far
+HAND_SPAN_MAX = 260              # ... = close to the camera
 
+# Obstacles only hurt when their depth (z) is within this of the player's.
 Z_DODGE_THRESHOLD = 0.38
 
 OBSTACLE_RADIUS_MIN = 12
@@ -24,56 +26,56 @@ OBSTACLE_COLORS = [
 OBSTACLE_EDGE_MARGIN = 10
 OBSTACLE_ANGLE_SPREAD_DEG = 35
 
-DIFFICULTY_RAMP_EVERY_FRAMES = 210
+# --- Fairness -----------------------------------------------------------------
+GRACE_SECONDS = 1.5              # nothing spawns right after the run starts
+HAND_LOST_PAUSE_SECONDS = 0.4    # hand missing longer than this pauses the game
+MIN_REACTION_SECONDS = 0.45      # spawns are placed so you get at least this long
+SWARM_WARNING_SECONDS = 1.2      # swarm is announced this long before it spawns
 
+# --- Difficulty ------------------------------------------------------------------
+# Everything is TIME based and RESOLUTION independent. Each (start, end) pair is
+# blended along an eased curve over `ramp_seconds`, then holds at `end`.
+#   spawn_interval : seconds between spawns
+#   speed          : screen-heights per second (1.0 = crosses the screen in 1s)
+#   homing_chance  : chance a normal obstacle is a chaser
+#   turn_rate      : how sharply chasers steer (per second)
+#   homing_seconds : chasers give up after this long and fly straight, so
+#                    they can always be outlasted
+#   max_active     : cap on obstacles on screen (stops flooding)
+#   swarm_every    : seconds between swarms (0 = none); swarm_size obstacles
 DIFFICULTY_PRESETS = {
     "easy": {
-        "spawn_interval_start": 55,
-        "spawn_interval_min": 26,
-        "spawn_ramp_step": 2,
-        "speed_start": 7,
-        "speed_max": 18,
-        "speed_ramp_step": 1,
-        "homing_chance_start": 0.0,
-        "homing_chance_max": 0.0,
-        "homing_ramp_step": 0.0,
-        "turn_rate_start": 0.0,
-        "turn_rate_max": 0.0,
-        "turn_rate_ramp_step": 0.0,
-        "swarm_interval_frames": 0,
+        "ramp_seconds": 90,
+        "spawn_interval": (1.8, 0.95),
+        "speed": (0.34, 0.72),
+        "homing_chance": (0.0, 0.0),
+        "turn_rate": (0.0, 0.0),
+        "homing_seconds": 0.0,
+        "max_active": 6,
+        "swarm_every": 0,
         "swarm_size": 0,
     },
     "mid": {
-        "spawn_interval_start": 36,
-        "spawn_interval_min": 13,
-        "spawn_ramp_step": 3,
-        "speed_start": 10,
-        "speed_max": 26,
-        "speed_ramp_step": 2,
-        "homing_chance_start": 0.30,
-        "homing_chance_max": 0.65,
-        "homing_ramp_step": 0.04,
-        "turn_rate_start": 0.020,
-        "turn_rate_max": 0.050,
-        "turn_rate_ramp_step": 0.003,
-        "swarm_interval_frames": 420,
+        "ramp_seconds": 75,
+        "spawn_interval": (1.3, 0.6),
+        "speed": (0.42, 0.95),
+        "homing_chance": (0.25, 0.6),
+        "turn_rate": (1.0, 2.2),
+        "homing_seconds": 2.5,
+        "max_active": 9,
+        "swarm_every": 16,
         "swarm_size": 3,
     },
     "hard": {
-        "spawn_interval_start": 20,
-        "spawn_interval_min": 7,
-        "spawn_ramp_step": 4,
-        "speed_start": 16,
-        "speed_max": 70,
-        "speed_ramp_step": 4,
-        "homing_chance_start": 0.60,
-        "homing_chance_max": 1.0,
-        "homing_ramp_step": 0.06,
-        "turn_rate_start": 0.045,
-        "turn_rate_max": 0.110,
-        "turn_rate_ramp_step": 0.007,
-        "swarm_interval_frames": 180,
-        "swarm_size": 5,
+        "ramp_seconds": 60,
+        "spawn_interval": (0.9, 0.38),
+        "speed": (0.62, 1.25),
+        "homing_chance": (0.5, 0.9),
+        "turn_rate": (1.8, 3.5),
+        "homing_seconds": 3.5,
+        "max_active": 13,
+        "swarm_every": 10,
+        "swarm_size": 4,
     },
 }
 
@@ -88,10 +90,9 @@ GAME_OVER_LINES = [
 ]
 
 HARD_MODE_TAUNTS = [
-    "Yeah, nobody clears this. Nice try.",
+    "Hard mode noticed you. That's all it needed.",
     "It was hunting you. It won.",
-    "You didn't lose. Hard mode just does this.",
     "The swarm sends its regards.",
-    "This mode isn't beatable. You just stall it.",
+    "Respect for even trying hard mode.",
     "Congrats, you survived longer than most.",
 ]

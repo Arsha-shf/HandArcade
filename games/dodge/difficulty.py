@@ -1,32 +1,31 @@
-from .config import DIFFICULTY_PRESETS, DIFFICULTY_RAMP_EVERY_FRAMES
+from .config import DIFFICULTY_PRESETS
 
 
-def get_difficulty(frame_count, level):
+def _lerp(pair, t):
+    a, b = pair
+    return a + (b - a) * t
+
+
+def get_difficulty(elapsed_seconds, level):
+    """
+    Difficulty at `elapsed_seconds` into a run. A smooth, continuous ramp
+    (no sudden jumps every few seconds), eased so it gets tough early and
+    then levels off at the preset's maximum.
+
+    Returns a dict; `speed` is in screen-heights per second.
+    """
     preset = DIFFICULTY_PRESETS[level]
-    ramps = frame_count // DIFFICULTY_RAMP_EVERY_FRAMES
-
-    spawn_interval = max(
-        preset["spawn_interval_min"],
-        preset["spawn_interval_start"] - ramps * preset["spawn_ramp_step"],
-    )
-    speed = min(
-        preset["speed_max"],
-        preset["speed_start"] + ramps * preset["speed_ramp_step"],
-    )
-    homing_chance = min(
-        preset["homing_chance_max"],
-        preset["homing_chance_start"] + ramps * preset["homing_ramp_step"],
-    )
-    turn_rate = min(
-        preset["turn_rate_max"],
-        preset["turn_rate_start"] + ramps * preset["turn_rate_ramp_step"],
-    )
+    x = min(1.0, max(0.0, elapsed_seconds / preset["ramp_seconds"]))
+    e = 1 - (1 - x) ** 2
 
     return {
-        "spawn_interval": spawn_interval,
-        "speed": speed,
-        "homing_chance": homing_chance,
-        "turn_rate": turn_rate,
-        "swarm_interval_frames": preset["swarm_interval_frames"],
+        "progress": e,
+        "spawn_interval": _lerp(preset["spawn_interval"], e),
+        "speed": _lerp(preset["speed"], e),
+        "homing_chance": _lerp(preset["homing_chance"], e),
+        "turn_rate": _lerp(preset["turn_rate"], e),
+        "homing_seconds": preset["homing_seconds"],
+        "max_active": preset["max_active"],
+        "swarm_every": preset["swarm_every"],
         "swarm_size": preset["swarm_size"],
     }

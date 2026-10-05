@@ -1,16 +1,17 @@
+import math
+
 from .config import HITBOX_FORGIVENESS, Z_DODGE_THRESHOLD
 from .player import player_radius
 
 
 def check_collision(player, obstacles):
+    """True if the player overlaps an obstacle at (roughly) the same depth."""
     px, py, pz = player["x"], player["y"], player["z"]
-    pr = player_radius(pz)
+    pr = player_radius(pz, player["ui"])
     for obs in obstacles:
-        dz = abs(pz - obs["z"])
-        if dz > Z_DODGE_THRESHOLD:
+        if abs(pz - obs["z"]) > Z_DODGE_THRESHOLD:
             continue
-        dist = ((px - obs["x"]) ** 2 + (py - obs["y"]) ** 2) ** 0.5
-        min_dist = (pr + obs["radius"]) * HITBOX_FORGIVENESS
-        if dist < min_dist:
+        dist = math.hypot(px - obs["x"], py - obs["y"])
+        if dist < (pr + obs["radius"]) * HITBOX_FORGIVENESS:
             return True
     return False

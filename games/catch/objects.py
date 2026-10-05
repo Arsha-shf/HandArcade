@@ -4,6 +4,9 @@ games/catch/objects.py
 Defines what a "catch" actually is: object types (good fruit, bonus star,
 bad bomb) and the FallingObject that spawner.py creates and game.py
 updates/draws every frame.
+
+Sizes: ObjectType.radius is for a 720px-tall frame; spawner.py passes
+scale = random * ui, so radius_px() is already resolution-correct.
 """
 
 import math
@@ -29,20 +32,24 @@ class ObjectType:
     drift_amp: float = 0.0
     drift_freq: float = 0.08
 
+
 OBJECT_TYPES = [
-    ObjectType("apple", points=1,  is_bad=False, radius=28, color=(60, 60, 230),
+    ObjectType("apple", points=1, is_bad=False, radius=28, color=(60, 60, 230),
                sprite_path=None, weight=5.0),
-    ObjectType("star",  points=3,  is_bad=False, radius=24, color=(30, 210, 250),
+    ObjectType("star", points=3, is_bad=False, radius=24, color=(30, 210, 250),
                sprite_path=None, weight=1.5, speed_multiplier=1.3,
                drift_amp=42.0, drift_freq=0.10),
-    ObjectType("bomb",  points=-2, is_bad=True,  radius=26, color=(40, 40, 40),
+    ObjectType("bomb", points=-2, is_bad=True, radius=26, color=(40, 40, 40),
                sprite_path=None, weight=2.0, speed_multiplier=1.1,
                drift_amp=22.0, drift_freq=0.07),
 ]
 
-def pick_object_type():
-    weights = [t.weight for t in OBJECT_TYPES]
+
+def pick_object_type(difficulty=0.0):
+    """difficulty 0..1: bombs get up to 2x as likely as the game ramps up."""
+    weights = [t.weight * (1.0 + difficulty if t.is_bad else 1.0) for t in OBJECT_TYPES]
     return random.choices(OBJECT_TYPES, weights=weights, k=1)[0]
+
 
 class FallingObject:
     """A single object currently falling on screen."""
@@ -71,9 +78,7 @@ class FallingObject:
         self.frame_w = frame_w
 
     def update(self, dt_scale=1.0):
-        """dt_scale: frame-rate normalizer (1.0 == one frame at the 30fps
-        this was tuned against), so speed/drift stay consistent even if
-        the webcam's actual frame rate wobbles."""
+        """dt_scale: frame-rate normalizer (1.0 == one frame at 30fps)."""
         self.t += dt_scale
         self.y += self.vy * dt_scale
         self.angle = (self.angle + self.spin * dt_scale) % 360
