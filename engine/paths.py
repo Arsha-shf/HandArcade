@@ -13,6 +13,7 @@ when run from source and when packaged with PyInstaller.
     deleted on exit, so settings must never be written there.
 """
 
+import contextlib
 import os
 import sys
 
@@ -44,8 +45,6 @@ def user_data_dir(app_name="HandArcade"):
         base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
 
     folder = os.path.join(base, app_name)
-    try:
+    with contextlib.suppress(OSError):
         os.makedirs(folder, exist_ok=True)
-    except OSError:
-        pass
     return folder

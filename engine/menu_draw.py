@@ -34,7 +34,6 @@ from engine.menu_state import (
     point_in_rect,
 )
 
-
 # --- low-level drawing helpers -------------------------------------------
 
 def rounded_rect(img, pt1, pt2, radius, color, thickness=-1):
