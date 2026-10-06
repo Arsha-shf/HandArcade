@@ -1,5 +1,19 @@
 import cv2
 
+from engine import hud as engine_hud
+from engine.hud import (
+    COLOR_ACCENT,
+    COLOR_SECONDARY,
+    draw_center_text,
+    draw_hints,
+    draw_score,
+    draw_stats,
+    draw_text,
+)
+from engine.layout import ui_scale
+
+from .score import COMBO_WINDOW
+
 _FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 _COMBO_FLAVOR = [
@@ -9,16 +23,7 @@ _COMBO_FLAVOR = [
     (10, "GODLIKE!"),
 ]
 
-
-def _ease_out_cubic(t):
-    return 1 - (1 - t) ** 3
-
-
-def _ease_out_back(t):
-    c1 = 1.70158
-    c3 = c1 + 1
-    t = max(0.0, min(1.0, t))
-    return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2
+GAME_OVER_HINT = "R / SPACE = play again    ESC = menu    Q = quit"
 
 
 class Popup:
@@ -38,22 +43,17 @@ def spawn_popup(popups, text, x, y, color=(255, 255, 255), scale=0.8, lifetime=0
     popups.append(Popup(text, x, y, color, scale, lifetime))
 
 
-def update_popups(popups, dt):
+def update_popups(popups, dt, ui=1.0):
     for p in popups:
-        p.y -= 40 * dt
+        p.y -= 40 * ui * dt
         p.life -= dt
     popups[:] = [p for p in popups if p.life > 0]
 
 
 def draw_popups(frame, popups):
     for p in popups:
-        t = max(0.0, p.life / p.max_life)
-        thickness = 2 if t > 0.35 else 1
-        scale = p.scale * (0.85 + 0.15 * t)
-        size, _ = cv2.getTextSize(p.text, _FONT, scale, thickness + 1)
-        origin = (int(p.x - size[0] / 2), int(p.y))
-        cv2.putText(frame, p.text, origin, _FONT, scale, (0, 0, 0), thickness + 2, cv2.LINE_AA)
-        cv2.putText(frame, p.text, origin, _FONT, scale, p.color, thickness, cv2.LINE_AA)
+        engine_hud.draw_popup(frame, p.x, p.y, p.text, p.color, scale=p.scale,
+                              life=max(0.0, p.life / p.max_life))
 
 
 def _combo_flavor(combo):
@@ -64,147 +64,84 @@ def _combo_flavor(combo):
     return label
 
 
-def draw_hud(frame, score, time_left, pulse=0.0, shield=None, frenzy=None):
+def draw_hud(frame, score, time_left, now, best, shield=None, frenzy=None):
     h, w = frame.shape[:2]
+    s = ui_scale(h)
 
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (w, 60), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.35, frame, 0.65, 0, frame)
-
-    score_scale = 1.0 + 0.35 * pulse
-    cv2.putText(frame, f"Score: {score.total}", (20, 40), _FONT, score_scale,
-                (255, 255, 255), 2, cv2.LINE_AA)
-
-    if score.combo >= 2:
-        flavor = _combo_flavor(score.combo)
-        combo_text = f"Combo x{score.current_multiplier()}  ({score.combo} in a row)"
-        if flavor:
-            combo_text += f"  {flavor}"
-        cv2.putText(frame, combo_text, (20, h - 20), _FONT, 0.7,
-                    (0, 200, 255), 2, cv2.LINE_AA)
+    draw_score(frame, score.total)
+    draw_stats(frame, [f"Best: {best}"])
 
     timer_color = (0, 0, 255) if time_left <= 10 else (255, 255, 255)
     timer_text = f"Time: {int(time_left) + 1}s" if time_left > 0 else "Time: 0s"
-    size, _ = cv2.getTextSize(timer_text, _FONT, 1.0, 2)
-    cv2.putText(frame, timer_text, (w - size[0] - 20, 40), _FONT, 1.0,
-                timer_color, 2, cv2.LINE_AA)
+    draw_text(frame, timer_text, (w - 30 * s, 45 * s), scale=1.0, color=timer_color,
+              thickness=2, align="right")
 
-    cv2.putText(frame, "Pinch a bubble to pop it  -  watch out for bombs!",
-                (20, 80), _FONT, 0.55, (200, 200, 200), 1, cv2.LINE_AA)
+    # combo: only while it is actually still alive, with a draining timer bar
+    if score.combo >= 2 and score.is_combo_active(now):
+        flavor = _combo_flavor(score.combo)
+        text = f"Combo x{score.current_multiplier()}  ({score.combo} in a row)"
+        if flavor:
+            text += f"  {flavor}"
+        draw_text(frame, text, (20 * s, h - 75 * s), scale=0.7, color=(0, 200, 255),
+                  thickness=2)
+        frac = score.combo_time_left(now) / COMBO_WINDOW
+        bar_w = int(240 * s * frac)
+        if bar_w > 0:
+            y = h - int(66 * s)
+            cv2.rectangle(frame, (int(20 * s), y), (int(20 * s) + bar_w, y + max(2, int(5 * s))),
+                          (0, 200, 255), -1)
+
+    draw_hints(frame)
 
     if shield is not None and shield.has_charge():
-        draw_shield_icon(frame, w - 46, 100)
+        draw_shield_icon(frame, w - 46 * s, 100 * s, s)
 
     if frenzy is not None and frenzy.is_active:
         draw_frenzy_banner(frame, frenzy)
 
 
-def draw_shield_icon(frame, x, y):
-    size = 16
+def draw_shield_icon(frame, x, y, s=1.0):
+    size = 16 * s
     pts = [
         (x, y - size),
-        (x + size, y - size // 2),
-        (x + int(size * 0.7), y + size),
-        (x, y + int(size * 1.3)),
-        (x - int(size * 0.7), y + size),
-        (x - size, y - size // 2),
+        (x + size, y - size / 2),
+        (x + size * 0.7, y + size),
+        (x, y + size * 1.3),
+        (x - size * 0.7, y + size),
+        (x - size, y - size / 2),
     ]
+    pts = [(int(px), int(py)) for px, py in pts]
     for i in range(len(pts)):
-        cv2.line(frame, pts[i], pts[(i + 1) % len(pts)], (210, 170, 90), 2, cv2.LINE_AA)
-    label = "Shield ready"
-    label_size, _ = cv2.getTextSize(label, _FONT, 0.5, 1)
-    cv2.putText(frame, label, (x - label_size[0] - 24, y + 8), _FONT, 0.5,
-                (210, 170, 90), 1, cv2.LINE_AA)
+        cv2.line(frame, pts[i], pts[(i + 1) % len(pts)], (210, 170, 90),
+                 max(1, round(2 * s)), cv2.LINE_AA)
+    draw_text(frame, "Shield ready", (x - 24 * s, y + 8 * s), scale=0.5,
+              color=(210, 170, 90), thickness=1, align="right")
 
 
 def draw_frenzy_banner(frame, frenzy):
-    h, w = frame.shape[:2]
-    text = "BUBBLE FRENZY!"
+    h = frame.shape[0]
+    s = ui_scale(h)
     wobble = 0.5 + 0.5 * ((frenzy.time_remaining * 6) % 1.0)
     scale = 1.2 + 0.15 * wobble
-    size, _ = cv2.getTextSize(text, _FONT, scale, 3)
-    origin = (w // 2 - size[0] // 2, 115)
-    cv2.putText(frame, text, origin, _FONT, scale, (0, 0, 0), 6, cv2.LINE_AA)
-    cv2.putText(frame, text, origin, _FONT, scale, (0, 120, 255), 3, cv2.LINE_AA)
+    draw_center_text(frame, "BUBBLE FRENZY!", 115 * s, scale=scale, color=(0, 120, 255),
+                     thickness=3)
 
 
 def draw_ready_countdown(frame, seconds_left):
-    h, w = frame.shape[:2]
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.25, frame, 0.75, 0, frame)
+    h = frame.shape[0]
+    s = ui_scale(h)
+    cv2.convertScaleAbs(frame, dst=frame, alpha=0.75)
 
     label = str(max(1, int(seconds_left) + 1)) if seconds_left > 0 else "POP!"
-    size, _ = cv2.getTextSize(label, _FONT, 3.0, 6)
-    origin = (w // 2 - size[0] // 2, h // 2 + size[1] // 2)
-    cv2.putText(frame, label, origin, _FONT, 3.0, (0, 255, 255), 6, cv2.LINE_AA)
+    draw_center_text(frame, label, h // 2 + 40 * s, scale=3.0, color=(0, 255, 255), thickness=6)
+    draw_center_text(frame, "Pinch your thumb and index finger together on a bubble to pop it",
+                     h // 2 + 100 * s, scale=0.7, thickness=2)
+    draw_center_text(frame, "Avoid the bombs!   Both hands work.", h // 2 + 135 * s,
+                     scale=0.7, color=COLOR_ACCENT, thickness=2)
+    draw_center_text(frame, "Get your fingers ready...", h // 2 + 175 * s, scale=0.6,
+                     color=COLOR_SECONDARY, thickness=1)
 
-    sub = "Get your fingers ready..."
-    sub_size, _ = cv2.getTextSize(sub, _FONT, 0.8, 2)
-    cv2.putText(frame, sub, (w // 2 - sub_size[0] // 2, h // 2 + size[1] + 40),
-                _FONT, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
 
-
-def draw_game_over(frame, score, progress=1.0):
-    """
-    Game-over overlay. Pass `progress` from 0.0 (just triggered) up to 1.0
-    while calling this every frame:
-      - background dims in
-      - "GAME OVER" drops in from above with a bounce/overshoot
-      - final score counts up from 0 to its real value
-      - combo/bomb stats fade in next
-      - hint fades in last
-    progress=1.0 (default) renders fully settled.
-    """
-    h, w = frame.shape[:2]
-    p = max(0.0, min(1.0, progress))
-
-    dim_eased = _ease_out_cubic(min(1.0, p / 0.3))
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.55 * dim_eased, frame, 1 - 0.55 * dim_eased, 0, frame)
-
-    def centered(target, text, y, scale, color, thickness):
-        size, _ = cv2.getTextSize(text, _FONT, scale, thickness)
-        cv2.putText(target, text, (w // 2 - size[0] // 2, y), _FONT, scale,
-                    color, thickness, cv2.LINE_AA)
-
-    # Title: bounces/drops in from above (0% -> 45%)
-    title_p = max(0.0, min(1.0, p / 0.45))
-    if title_p > 0.0:
-        bounce = _ease_out_back(title_p)
-        scale = max(0.1, 1.6 * bounce)
-        y_offset = int((1.0 - min(1.0, title_p * 1.4)) * -80)
-        title_layer = frame.copy()
-        centered(title_layer, "GAME OVER", h // 2 - 100 + y_offset, scale, (255, 255, 255), 3)
-        alpha = min(1.0, title_p * 2.0)
-        cv2.addWeighted(title_layer, alpha, frame, 1 - alpha, 0, frame)
-
-    # Score: counts up from 0 (35% -> 65%)
-    score_p = max(0.0, min(1.0, (p - 0.35) / 0.3))
-    if score_p > 0.0:
-        score_eased = _ease_out_cubic(score_p)
-        shown_score = int(score.total * score_eased) if score_p < 1.0 else score.total
-        score_layer = frame.copy()
-        centered(score_layer, f"Score: {shown_score}", h // 2 - 40, 1.1, (0, 255, 255), 2)
-        cv2.addWeighted(score_layer, score_eased, frame, 1 - score_eased, 0, frame)
-
-    # Combo + bomb stats: fade in next (55% -> 80%)
-    stats_p = max(0.0, min(1.0, (p - 0.55) / 0.25))
-    if stats_p > 0.02:
-        stats_layer = frame.copy()
-        centered(stats_layer,
-                 f"Best combo: x{max(1, score.current_multiplier() if score.combo else 1)}"
-                 f"  ({score.best_combo} in a row)", h // 2, 0.7, (200, 200, 200), 1)
-        bomb_line = "Didn't touch a single bomb. Show-off." if score.bombs_hit == 0 else \
-            f"Bombs popped: {score.bombs_hit} (ouch)"
-        centered(stats_layer, bomb_line, h // 2 + 35, 0.65, (170, 170, 255), 1)
-        cv2.addWeighted(stats_layer, stats_p, frame, 1 - stats_p, 0, frame)
-
-    # Hint: comes in last (75% -> 100%)
-    hint_p = max(0.0, min(1.0, (p - 0.75) / 0.25))
-    if hint_p > 0.02:
-        hint_layer = frame.copy()
-        centered(hint_layer, "R = play again    ESC = menu    Q = quit", h // 2 + 90, 0.7,
-                 (255, 255, 255), 2)
-        cv2.addWeighted(hint_layer, hint_p, frame, 1 - hint_p, 0, frame)
+def draw_game_over(frame, score, best_line, progress=1.0, extra=None):
+    engine_hud.draw_game_over(frame, score.total, message=best_line, progress=progress,
+                              hint=GAME_OVER_HINT, extra=extra)

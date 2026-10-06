@@ -1,26 +1,59 @@
 """
 Gameplay "feel" helpers that sit alongside the core bubble/score logic:
-input smoothing so pinch tracking doesn't feel jittery, a screen-shake
-effect for satisfying bomb hits, a periodic "Bubble Frenzy" event for
-pacing variety, and a one-charge shield power-up.
+pinch detection, input smoothing, a screen-shake effect for bomb hits, a
+periodic "Bubble Frenzy" event, and a one-charge shield power-up.
 """
 
+import math
 import random
+
+from engine.tracking import INDEX_FINGER_TIP, MIDDLE_FINGER_MCP, THUMB_TIP, WRIST
+
+# Pinch thresholds as a RATIO of thumb-to-index distance over palm size
+# (wrist -> middle knuckle). Relative to the hand, so it works the same
+# whether the hand is near or far from the camera, and in any direction
+# (the old threshold used raw normalized x/y, which differ between width and
+# height on a 16:9 frame). Tune these if pinching feels too loose/strict.
+PINCH_ENTER_RATIO = 0.28   # closer than this -> pinched
+PINCH_EXIT_RATIO = 0.40    # farther than this -> released (hysteresis, no flicker)
+
+
+def pinch_ratio(hand, frame_shape):
+    """Thumb-tip to index-tip distance divided by palm size, in pixels."""
+    h, w = frame_shape[:2]
+    lm = hand.landmark
+
+    def px(i):
+        return lm[i].x * w, lm[i].y * h
+
+    tx, ty = px(THUMB_TIP)
+    ix, iy = px(INDEX_FINGER_TIP)
+    wx, wy = px(WRIST)
+    mx, my = px(MIDDLE_FINGER_MCP)
+
+    palm = math.hypot(mx - wx, my - wy)
+    if palm < 1e-6:
+        return 9.9
+    return math.hypot(tx - ix, ty - iy) / palm
 
 
 class HandSmoother:
+    """Smooths each hand's pinch point. alpha is per 30fps-frame; pass dt_scale
+    (1.0 == one 30fps frame) so it behaves the same at any frame rate."""
+
     def __init__(self, alpha=0.55):
         self.alpha = alpha
         self._smoothed = {}
 
-    def smooth(self, hand_id, point):
+    def smooth(self, hand_id, point, dt_scale=1.0):
         prev = self._smoothed.get(hand_id)
         if prev is None:
             self._smoothed[hand_id] = (float(point[0]), float(point[1]))
             return point
 
-        sx = prev[0] + (point[0] - prev[0]) * self.alpha
-        sy = prev[1] + (point[1] - prev[1]) * self.alpha
+        a = 1.0 - (1.0 - self.alpha) ** max(0.0, dt_scale)
+        sx = prev[0] + (point[0] - prev[0]) * a
+        sy = prev[1] + (point[1] - prev[1]) * a
         self._smoothed[hand_id] = (sx, sy)
         return (int(sx), int(sy))
 
@@ -33,7 +66,12 @@ class HandSmoother:
         self._smoothed.clear()
 
 
-class HandTracker:
+class HandIdentityTracker:
+    """Gives each hand a stable id across frames (MediaPipe doesn't keep hand
+    order stable). Matches detections to the nearest known hand.
+    (Renamed from HandTracker so it can't be confused with
+    engine.tracking.HandTracker.)"""
+
     def __init__(self, max_distance=160.0, max_missed_seconds=0.6):
         self.max_distance = max_distance
         self.max_missed_seconds = max_missed_seconds
@@ -50,7 +88,7 @@ class HandTracker:
             dx0, dy0 = det["point"]
             for track_id in unmatched_tracks:
                 tx, ty = self._tracks[track_id]["point"]
-                dist = ((dx0 - tx) ** 2 + (dy0 - ty) ** 2) ** 0.5
+                dist = math.hypot(dx0 - tx, dy0 - ty)
                 if dist <= self.max_distance:
                     candidates.append((dist, det_i, track_id))
         candidates.sort(key=lambda c: c[0])
@@ -86,16 +124,19 @@ class HandTracker:
         self._next_id = 0
 
 
-class PinchTracker: 
-    def __init__(self, enter_threshold=0.055, exit_threshold=0.075):
+class PinchTracker:
+    """Turns a per-frame pinch ratio into a stable pinched / not-pinched state
+    (with hysteresis so it doesn't flicker at the threshold)."""
+
+    def __init__(self, enter_threshold=PINCH_ENTER_RATIO, exit_threshold=PINCH_EXIT_RATIO):
         self.enter_threshold = enter_threshold
         self.exit_threshold = exit_threshold
         self._state = {}
 
-    def update(self, hand_id, distance):
+    def update(self, hand_id, ratio):
         was_pinched = self._state.get(hand_id, False)
         threshold = self.exit_threshold if was_pinched else self.enter_threshold
-        is_pinched = distance < threshold
+        is_pinched = ratio < threshold
         self._state[hand_id] = is_pinched
         return is_pinched
 
@@ -128,6 +169,9 @@ class ScreenShake:
         dx = random.uniform(-1, 1) * self.max_pixels * power
         dy = random.uniform(-1, 1) * self.max_pixels * power
         return int(dx), int(dy)
+
+    def reset(self):
+        self.trauma = 0.0
 
 
 class FrenzyManager:

@@ -36,7 +36,7 @@ from engine.paths import resolve
 # reuses cached rotations. 5 deg -> 72 variants per (sprite, scale): looks
 # continuous, and 72 x 3 sprites x a few scales stays well under the cap.
 ANGLE_BUCKET_DEG = 5
-_MAX_CACHE_ENTRIES = 1500
+_MAX_CACHE_ENTRIES = 800
 
 _base_cache = {}                 # path -> premultiplied BGRA uint8
 _sprite_cache = OrderedDict()    # (path, scale, angle) -> premultiplied BGRA uint8

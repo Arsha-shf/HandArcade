@@ -1,96 +1,60 @@
 """
 games/fruit_slice/hud.py
 
-On-screen score/lives display and the game-over overlay.
+Fruit Slice HUD: score/stats/hints and the game-over screen come from
+engine/hud.py; this file adds the heart row for lives.
 """
 
+import math
+
 import cv2
+import numpy as np
 
-FONT = cv2.FONT_HERSHEY_SIMPLEX
+from engine import hud as engine_hud
+from engine.hud import draw_hints, draw_score, draw_stats
+from engine.layout import ui_scale
 
-
-def _ease_out_cubic(t):
-    return 1 - (1 - t) ** 3
-
-
-def _ease_out_back(t):
-    c1 = 1.70158
-    c3 = c1 + 1
-    t = max(0.0, min(1.0, t))
-    return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2
+GAME_OVER_HINT = "SPACE = retry   D = difficulty   ESC = menu   q = quit"
 
 
-def draw_hud(frame, score, misses, max_misses, fps=None, difficulty=None):
+def _heart_points(cx, cy, size):
+    pts = []
+    for i in range(32):
+        t = 2 * math.pi * i / 32
+        x = 16 * math.sin(t) ** 3
+        y = 13 * math.cos(t) - 5 * math.cos(2 * t) - 2 * math.cos(3 * t) - math.cos(4 * t)
+        pts.append((int(cx + x * size / 34), int(cy - y * size / 34)))
+    return np.array(pts, dtype=np.int32)
+
+
+def draw_lives(frame, lives, max_lives):
+    """Row of hearts, top-right. Filled = life left, outline = life lost."""
     h, w = frame.shape[:2]
-    cv2.putText(frame, f"Score: {score}", (20, 40),
-                FONT, 0.9, (255, 255, 255), 2)
+    s = ui_scale(h)
+    size = 30 * s
+    spacing = 40 * s
+    x0 = w - 30 * s - (max_lives - 1) * spacing
+    cy = 38 * s
 
-    life_text = "Lives: " + " ".join("X" for _ in range(max_misses - misses))
-    cv2.putText(frame, life_text if life_text.strip() != "Lives:" else "Lives:",
-                (w - 260, 40), FONT, 0.8, (100, 100, 255), 2)
+    for i in range(max_lives):
+        pts = _heart_points(x0 + i * spacing, cy, size)
+        if i < lives:
+            cv2.fillPoly(frame, [pts], (70, 70, 255), cv2.LINE_AA)
+            cv2.polylines(frame, [pts], True, (0, 0, 120), max(1, round(2 * s)), cv2.LINE_AA)
+        else:
+            cv2.polylines(frame, [pts], True, (150, 150, 150), max(1, round(2 * s)), cv2.LINE_AA)
 
+
+def draw_hud(frame, score, lives, max_lives, best, difficulty, fps=None):
+    draw_score(frame, score)
+    stats = [f"Mode: {difficulty.upper()}", f"Best: {best}"]
     if fps is not None:
-        cv2.putText(frame, f"FPS: {fps:.0f}", (20, 70),
-                    FONT, 0.6, (0, 255, 0), 1)
-
-    if difficulty is not None:
-        cv2.putText(frame, difficulty.upper(), (w - 260, 70),
-                    FONT, 0.6, (200, 200, 0), 1)
-
-    cv2.putText(frame, "ESC = menu    q = quit", (20, h - 20),
-                FONT, 0.55, (200, 200, 200), 1)
+        stats.append(f"FPS: {fps:.0f}")
+    draw_stats(frame, stats)
+    draw_lives(frame, lives, max_lives)
+    draw_hints(frame, "ESC = menu   q = quit   f = fps")
 
 
-def draw_game_over(frame, score, progress=1.0):
-    """
-    Game-over overlay. Pass `progress` from 0.0 (just triggered) up to 1.0
-    while calling this every frame:
-      - background dims in
-      - "GAME OVER" drops in from above with a bounce/overshoot
-      - final score counts up from 0 to its real value
-      - hint fades in last
-    progress=1.0 (default) renders fully settled.
-    """
-    h, w = frame.shape[:2]
-    p = max(0.0, min(1.0, progress))
-
-    dim_eased = _ease_out_cubic(min(1.0, p / 0.3))
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (w, h), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.55 * dim_eased, frame, 1 - 0.55 * dim_eased, 0, frame)
-
-    # Title: bounces/drops in from above (0% -> 45%)
-    title_p = max(0.0, min(1.0, p / 0.45))
-    if title_p > 0.0:
-        bounce = _ease_out_back(title_p)
-        text = "GAME OVER"
-        scale = max(0.1, 1.6 * bounce)
-        (tw, th), _ = cv2.getTextSize(text, FONT, scale, 3)
-        y_offset = int((1.0 - min(1.0, title_p * 1.4)) * -80)
-        title_layer = frame.copy()
-        cv2.putText(title_layer, text, ((w - tw) // 2, h // 2 - 40 + y_offset),
-                    FONT, scale, (60, 60, 255), 3)
-        alpha = min(1.0, title_p * 2.0)
-        cv2.addWeighted(title_layer, alpha, frame, 1 - alpha, 0, frame)
-
-    # Score: counts up from 0 (35% -> 70%)
-    score_p = max(0.0, min(1.0, (p - 0.35) / 0.35))
-    if score_p > 0.0:
-        score_eased = _ease_out_cubic(score_p)
-        shown_score = int(score * score_eased) if score_p < 1.0 else score
-        rest_layer = frame.copy()
-        score_text = f"Final Score: {shown_score}"
-        (sw, sh), _ = cv2.getTextSize(score_text, FONT, 1.0, 2)
-        cv2.putText(rest_layer, score_text, ((w - sw) // 2, h // 2 + 15),
-                    FONT, 1.0, (255, 255, 255), 2)
-        cv2.addWeighted(rest_layer, score_eased, frame, 1 - score_eased, 0, frame)
-
-    # Hint: comes in last (60% -> 100%)
-    hint_p = max(0.0, min(1.0, (p - 0.6) / 0.4))
-    if hint_p > 0.02:
-        hint_layer = frame.copy()
-        hint = "Press any key for menu, q to quit"
-        (hw, hh), _ = cv2.getTextSize(hint, FONT, 0.7, 1)
-        cv2.putText(hint_layer, hint, ((w - hw) // 2, h // 2 + 60),
-                    FONT, 0.7, (180, 180, 180), 1)
-        cv2.addWeighted(hint_layer, hint_p, frame, 1 - hint_p, 0, frame)
+def draw_game_over(frame, score, progress=1.0, extra=None):
+    engine_hud.draw_game_over(frame, score, progress=progress, hint=GAME_OVER_HINT,
+                              extra=extra)

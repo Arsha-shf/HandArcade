@@ -1,16 +1,20 @@
 """
-Bubble kinds (this is the "fun" knob -- add more here later for the
-harder difficulty tiers mentioned in the ticket):
+Bubble kinds:
     normal  - slow, safe, worth a little
     fast    - quicker + smaller, worth more, harder to land a pinch on
     golden  - rare, big score bonus, extra sparkle
-    bomb    - rare "gotcha" bubble -- popping it costs points and resets
-              your combo, so players have to actually look before they
-              pinch instead of just clawing at everything on screen
-    chain   - popping it also sweeps up every non-bomb bubble nearby,
-              turning a lucky cluster into one big satisfying blast
-    shield  - a one-time bomb insurance policy; pop it and the next
-              bomb you touch does nothing instead of hurting your combo
+    bomb    - popping it costs points and resets your combo
+    chain   - popping it also sweeps up every non-bomb bubble nearby
+    shield  - a one-time bomb insurance policy
+
+Difficulty ramps over the round (`progress` 0 -> 1):
+    - bubbles rise up to 35% faster
+    - bombs get more common (and never appear in the first seconds)
+    - fast bubbles get more common
+    - spawn interval shrinks (see BubbleManager._spawn_interval)
+
+Pixel values are for a 720px-tall frame; `ui` (engine.layout.ui_scale)
+scales them to the real frame.
 """
 
 import math
@@ -21,12 +25,16 @@ import numpy as np
 
 _KIND_WEIGHTS = {
     "normal": 54,
-    "fast": 20,
+    "fast": 16,
     "golden": 6,
-    "bomb": 8,
+    "bomb": 6,
     "chain": 6,
     "shield": 6,
 }
+
+BOMB_GRACE_SECONDS = 4.0
+MAX_ACTIVE = 14
+MAX_ACTIVE_FRENZY = 22
 
 _KIND_SPEC = {
     "normal": dict(radius=(30, 44), speed=(70, 120), points=10, wobble=(8, 18), freq=(1.0, 2.0)),
@@ -51,6 +59,8 @@ _GRAVITY = 260.0
 _CHAIN_RADIUS = 235.0
 _MAX_PARTICLES = 260
 
+PINCH_PADDING = 10   # px @720p: extra reach around a bubble when pinching
+
 
 def _distance(x1, y1, x2, y2):
     return math.hypot(x1 - x2, y1 - y2)
@@ -60,20 +70,21 @@ class Bubble:
     __slots__ = (
         "base_x", "x", "y", "radius", "vy", "kind", "points",
         "fill_color", "border_color", "wobble_amp", "wobble_freq",
-        "phase", "age",
+        "phase", "age", "ui",
     )
 
-    def __init__(self, base_x, y, kind):
+    def __init__(self, base_x, y, kind, ui=1.0, speed_mult=1.0):
         spec = _KIND_SPEC[kind]
+        self.ui = ui
         self.base_x = base_x
         self.x = base_x
         self.y = y
-        self.radius = random.uniform(*spec["radius"])
-        self.vy = random.uniform(*spec["speed"])
+        self.radius = random.uniform(*spec["radius"]) * ui
+        self.vy = random.uniform(*spec["speed"]) * ui * speed_mult
         self.kind = kind
         self.points = spec["points"]
         self.fill_color, self.border_color = _KIND_COLOR[kind]
-        self.wobble_amp = random.uniform(*spec["wobble"])
+        self.wobble_amp = random.uniform(*spec["wobble"]) * ui
         self.wobble_freq = random.uniform(*spec["freq"])
         self.phase = random.uniform(0, 2 * math.pi)
         self.age = 0.0
@@ -91,10 +102,11 @@ class Bubble:
     def is_off_screen(self):
         return self.y + self.radius < 0
 
-    def contains_point(self, px, py):
+    def contains_point(self, px, py, padding=0.0):
         r = self.display_radius
         if r <= 0:
             return False
+        r += padding
         return (px - self.x) ** 2 + (py - self.y) ** 2 <= r * r
 
     def draw(self, frame):
@@ -102,17 +114,18 @@ class Bubble:
         if r <= 0:
             return
         x, y = int(self.x), int(self.y)
+        border = max(1, round(2 * self.ui))
 
         cv2.circle(frame, (x, y), r, self.fill_color, -1, lineType=cv2.LINE_AA)
-        cv2.circle(frame, (x, y), r, self.border_color, 2, lineType=cv2.LINE_AA)
+        cv2.circle(frame, (x, y), r, self.border_color, border, lineType=cv2.LINE_AA)
 
         hl_r = max(2, int(r * 0.35))
         hl_x, hl_y = x - int(r * 0.35), y - int(r * 0.35)
         cv2.circle(frame, (hl_x, hl_y), hl_r, (255, 255, 255), -1, lineType=cv2.LINE_AA)
 
-        self._draw_face(frame, x, y, r)
+        self._draw_face(frame, x, y, r, border)
 
-    def _draw_face(self, frame, x, y, r):
+    def _draw_face(self, frame, x, y, r, w2):
         eye_dx = max(2, int(r * 0.32))
         eye_y = y - int(r * 0.05)
         eye_r = max(1, int(r * 0.11))
@@ -120,11 +133,12 @@ class Bubble:
         if self.kind == "bomb":
             for ex in (x - eye_dx, x + eye_dx):
                 s = eye_r
-                cv2.line(frame, (ex - s, eye_y - s), (ex + s, eye_y + s), (0, 0, 0), 2, cv2.LINE_AA)
-                cv2.line(frame, (ex - s, eye_y + s), (ex + s, eye_y - s), (0, 0, 0), 2, cv2.LINE_AA)
-            cv2.line(frame, (x - eye_dx, y + int(r * 0.4)), (x + eye_dx, y + int(r * 0.4)), (0, 0, 0), 2, cv2.LINE_AA)
+                cv2.line(frame, (ex - s, eye_y - s), (ex + s, eye_y + s), (0, 0, 0), w2, cv2.LINE_AA)
+                cv2.line(frame, (ex - s, eye_y + s), (ex + s, eye_y - s), (0, 0, 0), w2, cv2.LINE_AA)
+            cv2.line(frame, (x - eye_dx, y + int(r * 0.4)), (x + eye_dx, y + int(r * 0.4)),
+                     (0, 0, 0), w2, cv2.LINE_AA)
             fuse_top = (x, y - r - int(r * 0.4))
-            cv2.line(frame, (x, y - r), fuse_top, (60, 60, 60), 2, cv2.LINE_AA)
+            cv2.line(frame, (x, y - r), fuse_top, (60, 60, 60), w2, cv2.LINE_AA)
             spark_color = (0, 255, 255) if int(self.age * 8) % 2 == 0 else (0, 140, 255)
             cv2.circle(frame, fuse_top, max(2, int(r * 0.14)), spark_color, -1, cv2.LINE_AA)
             return
@@ -132,7 +146,7 @@ class Bubble:
         if self.kind == "chain":
             link_r = max(3, int(r * 0.22))
             for ox in (-int(r * 0.4), 0, int(r * 0.4)):
-                cv2.circle(frame, (x + ox, y), link_r, (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.circle(frame, (x + ox, y), link_r, (255, 255, 255), w2, cv2.LINE_AA)
             return
 
         if self.kind == "shield":
@@ -144,7 +158,7 @@ class Bubble:
                 [x - int(r * 0.35), y + int(r * 0.35)],
                 [x - int(r * 0.45), y - int(r * 0.25)],
             ], dtype=np.int32)
-            cv2.polylines(frame, [pts], True, (60, 120, 200), 2, cv2.LINE_AA)
+            cv2.polylines(frame, [pts], True, (60, 120, 200), w2, cv2.LINE_AA)
             cv2.circle(frame, (x, y), max(2, int(r * 0.12)), (60, 120, 200), -1, cv2.LINE_AA)
             return
 
@@ -157,31 +171,33 @@ class Bubble:
             cv2.circle(frame, (x, mouth_y), max(2, int(r * 0.16)), (20, 20, 20), -1, cv2.LINE_AA)
         else:
             axes = (max(2, int(r * 0.35)), max(2, int(r * 0.22)))
-            cv2.ellipse(frame, (x, mouth_y), axes, 0, 20, 160, (20, 20, 20), 2, cv2.LINE_AA)
+            cv2.ellipse(frame, (x, mouth_y), axes, 0, 20, 160, (20, 20, 20), w2, cv2.LINE_AA)
 
         if self.kind == "golden":
-            for sx, sy, s in ((x + r * 0.55, y - r * 0.55, 6), (x - r * 0.6, y + r * 0.1, 4)):
+            sp = max(3, int(5 * self.ui))
+            for sx, sy in ((x + r * 0.55, y - r * 0.55), (x - r * 0.6, y + r * 0.1)):
                 sx, sy = int(sx), int(sy)
-                cv2.line(frame, (sx - s, sy), (sx + s, sy), (255, 255, 255), 2, cv2.LINE_AA)
-                cv2.line(frame, (sx, sy - s), (sx, sy + s), (255, 255, 255), 2, cv2.LINE_AA)
+                cv2.line(frame, (sx - sp, sy), (sx + sp, sy), (255, 255, 255), w2, cv2.LINE_AA)
+                cv2.line(frame, (sx, sy - sp), (sx, sy + sp), (255, 255, 255), w2, cv2.LINE_AA)
 
 
 class Particle:
 
-    __slots__ = ("x", "y", "vx", "vy", "life", "max_life", "radius", "color")
+    __slots__ = ("x", "y", "vx", "vy", "life", "max_life", "radius", "color", "gravity")
 
-    def __init__(self, x, y, vx, vy, life, radius, color):
+    def __init__(self, x, y, vx, vy, life, radius, color, gravity):
         self.x, self.y = x, y
         self.vx, self.vy = vx, vy
         self.life = life
         self.max_life = life
         self.radius = radius
         self.color = color
+        self.gravity = gravity
 
     def update(self, dt):
         self.x += self.vx * dt
         self.y += self.vy * dt
-        self.vy += _GRAVITY * dt
+        self.vy += self.gravity * dt
         self.life -= dt
 
     @property
@@ -194,22 +210,24 @@ class Particle:
         cv2.circle(frame, (int(self.x), int(self.y)), r, self.color, -1, cv2.LINE_AA)
 
 
-def _burst(x, y, kind):
+def _burst(x, y, kind, ui):
     fill_color, border_color = _KIND_COLOR[kind]
     count = {"normal": 10, "fast": 12, "golden": 22, "bomb": 16, "chain": 26, "shield": 14}[kind]
     particles = []
     for _ in range(count):
         angle = random.uniform(0, 2 * math.pi)
-        speed = random.uniform(60, 220 if kind != "golden" else 320)
+        speed = random.uniform(60, 220 if kind != "golden" else 320) * ui
         vx, vy = math.cos(angle) * speed, math.sin(angle) * speed
         color = fill_color if random.random() < 0.6 else border_color
         particles.append(Particle(x, y, vx, vy, life=random.uniform(0.3, 0.6),
-                                   radius=random.uniform(3, 7), color=color))
+                                   radius=random.uniform(3, 7) * ui, color=color,
+                                   gravity=_GRAVITY * ui))
     return particles
 
 
 class BubbleManager:
-    def __init__(self):
+    def __init__(self, ui=1.0):
+        self.ui = ui
         self.bubbles = []
         self.particles = []
         self._spawn_timer = 0.0
@@ -218,21 +236,39 @@ class BubbleManager:
     def _spawn_interval(self, elapsed):
         return max(0.4, 1.1 - elapsed * 0.015)
 
-    def _pick_kind(self):
-        kinds, weights = zip(*_KIND_WEIGHTS.items(), strict=True)
-        return random.choices(kinds, weights=weights, k=1)[0]
+    def _pick_kind(self, elapsed, progress):
+        weights = dict(_KIND_WEIGHTS)
+        weights["bomb"] = 0 if elapsed < BOMB_GRACE_SECONDS else 6 + 8 * progress
+        weights["fast"] = 16 + 14 * progress
+        kinds = list(weights)
+        return random.choices(kinds, weights=[weights[k] for k in kinds], k=1)[0]
 
-    def _spawn(self, frame_w, frame_h):
-        kind = self._pick_kind()
-        margin = 50
-        base_x = random.uniform(margin, max(margin + 1, frame_w - margin))
-        y = frame_h + 40
-        self.bubbles.append(Bubble(base_x, y, kind))
+    def _pick_x(self, frame_w, frame_h):
+        """Of a few random columns, take the one farthest from bubbles that
+        are still near the bottom, so new bubbles don't spawn on top of each
+        other."""
+        margin = 50 * self.ui
+        lo, hi = margin, max(margin + 1, frame_w - margin)
+        low_band = [b for b in self.bubbles if b.y > frame_h * 0.7]
+        best_x, best_gap = None, -1e9
+        for _ in range(6):
+            x = random.uniform(lo, hi)
+            gap = min((abs(x - b.x) - b.radius for b in low_band), default=1e9)
+            if gap > best_gap:
+                best_x, best_gap = x, gap
+        return best_x
 
-    def update(self, dt, frame_w, frame_h, elapsed):
+    def _spawn(self, frame_w, frame_h, elapsed, progress):
+        kind = self._pick_kind(elapsed, progress)
+        base_x = self._pick_x(frame_w, frame_h)
+        y = frame_h + 40 * self.ui
+        self.bubbles.append(Bubble(base_x, y, kind, self.ui, speed_mult=1.0 + 0.35 * progress))
+
+    def update(self, dt, frame_w, frame_h, elapsed, progress=0.0):
         self._spawn_timer -= dt
-        if self._spawn_timer <= 0:
-            self._spawn(frame_w, frame_h)
+        cap = MAX_ACTIVE_FRENZY if self.spawn_rate_multiplier > 1.0 else MAX_ACTIVE
+        if self._spawn_timer <= 0 and len(self.bubbles) < cap:
+            self._spawn(frame_w, frame_h, elapsed, progress)
             self._spawn_timer = self._spawn_interval(elapsed) / max(0.1, self.spawn_rate_multiplier)
 
         for bubble in self.bubbles:
@@ -246,9 +282,10 @@ class BubbleManager:
             self.particles = self.particles[-_MAX_PARTICLES:]
 
     def try_pop(self, px, py):
+        padding = PINCH_PADDING * self.ui
         hit = None
         for bubble in reversed(self.bubbles):
-            if bubble.contains_point(px, py):
+            if bubble.contains_point(px, py, padding):
                 hit = bubble
                 break
 
@@ -256,17 +293,18 @@ class BubbleManager:
             return []
 
         self.bubbles.remove(hit)
-        self.particles.extend(_burst(hit.x, hit.y, hit.kind))
+        self.particles.extend(_burst(hit.x, hit.y, hit.kind, self.ui))
         popped = [hit]
 
         if hit.kind == "chain":
+            chain_radius = _CHAIN_RADIUS * self.ui
             nearby = [
                 b for b in self.bubbles
-                if b.kind != "bomb" and _distance(b.x, b.y, hit.x, hit.y) <= _CHAIN_RADIUS
+                if b.kind != "bomb" and _distance(b.x, b.y, hit.x, hit.y) <= chain_radius
             ]
             for b in nearby:
                 self.bubbles.remove(b)
-                self.particles.extend(_burst(b.x, b.y, b.kind))
+                self.particles.extend(_burst(b.x, b.y, b.kind, self.ui))
                 popped.append(b)
 
         return popped

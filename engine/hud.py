@@ -204,6 +204,33 @@ def draw_center_text(frame, text, y, scale=1.0, color=COLOR_PRIMARY, thickness=2
         _center_alpha(frame, text, y, sc, color, th, alpha)
 
 
+def draw_text(frame, text, pos, scale=0.6, color=COLOR_PRIMARY, thickness=1, align="left"):
+    """Text with shadow at pixel `pos` (x, baseline y). scale/thickness are in
+    720p units and scaled automatically. align: "left" | "center" | "right"."""
+    s = _ui(frame)
+    sc, th = scale * s, _th(thickness, s)
+    (tw, _), _ = cv2.getTextSize(text, FONT, sc, th)
+    x, y = int(pos[0]), int(pos[1])
+    if align == "right":
+        x -= tw
+    elif align == "center":
+        x -= tw // 2
+    _put_text_shadow(frame, text, (x, y), sc, color, th, s)
+
+
+def draw_popup(frame, x, y, text, color=COLOR_PRIMARY, scale=0.9, life=1.0):
+    """Floating score popup centered on (x, y). life goes 1.0 -> 0.0 and
+    shrinks/thins the text as it expires. The caller moves y upward."""
+    s = _ui(frame)
+    life = max(0.0, min(1.0, life))
+    sc = scale * (0.85 + 0.15 * life) * s
+    th = _th(2 if life > 0.35 else 1, s)
+    (tw, _), _ = cv2.getTextSize(text, FONT, sc, th + 1)
+    org = (int(x - tw / 2), int(y))
+    cv2.putText(frame, text, org, FONT, sc, (0, 0, 0), th + 2, cv2.LINE_AA)
+    cv2.putText(frame, text, org, FONT, sc, color, th, cv2.LINE_AA)
+
+
 def draw_game_over(frame, score, message=None, lines=None, retry=True, progress=1.0,
                    hint=None, extra=None):
     """
@@ -214,7 +241,8 @@ def draw_game_over(frame, score, message=None, lines=None, retry=True, progress=
              (if None and `lines` is given, a random line is picked per call,
              which would change every frame).
     hint:    override the bottom key hint line.
-    extra:   optional line under the score (e.g. "NEW BEST!").
+    extra:   optional line (str) or lines (list of str) under the score,
+             e.g. "NEW BEST!". The first is highlighted.
     """
     if message is None and lines:
         message = random.choice(lines)
@@ -223,6 +251,7 @@ def draw_game_over(frame, score, message=None, lines=None, retry=True, progress=
     h, w = frame.shape[:2]
     s = _ui(frame)
     cy = h // 2
+    extras = [extra] if isinstance(extra, str) else list(extra or [])
 
     # Dim background (first 30%)
     dim_eased = _ease_out_cubic(min(1.0, p / 0.3))
@@ -249,12 +278,14 @@ def draw_game_over(frame, score, message=None, lines=None, retry=True, progress=
         shown = int(score * eased) if score_p < 1.0 else score
         _center_alpha(frame, f"Final score: {shown}", cy + 30 * s, 0.8 * s,
                       COLOR_PRIMARY, _th(2, s), eased)
-        if extra:
-            _center_alpha(frame, extra, cy + 66 * s, 0.7 * s, COLOR_ACCENT, _th(2, s), eased)
+        for i, line in enumerate(extras):
+            _center_alpha(frame, line, cy + (66 + 34 * i) * s, 0.7 * s,
+                          COLOR_ACCENT if i == 0 else COLOR_SECONDARY, _th(2, s), eased)
 
     # Hint last (75% -> 100%)
     hint_p = max(0.0, min(1.0, (p - 0.75) / 0.25))
     if hint_p > 0.02:
         if hint is None:
             hint = "SPACE = retry   ESC = menu   q = quit" if retry else "ESC = menu   q = quit"
-        _center_alpha(frame, hint, cy + 108 * s, 0.6 * s, COLOR_SECONDARY, _th(1, s), hint_p)
+        hint_y = cy + (108 + 34 * max(0, len(extras) - 1)) * s
+        _center_alpha(frame, hint, hint_y, 0.6 * s, COLOR_SECONDARY, _th(1, s), hint_p)
