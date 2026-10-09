@@ -210,7 +210,7 @@ def run_dodge(cap, tracker):
             return "menu"
         if key == ord("q"):
             return "quit"
-        if key == ord(" ") and not run["alive"]:
+        if key in (ord(" "), ord("r")) and not run["alive"]:
             run = _new_run(frame_w, frame_h)
             engine_hud.reset_score_animation()
             last_time = time.perf_counter()

@@ -112,10 +112,7 @@ class HandTracker:
         if not os.path.exists(model_path):
             raise FileNotFoundError(
                 f"Hand landmark model not found at {model_path}. "
-                "Download it with:\n"
-                "  wget -O engine/models/hand_landmarker.task "
-                "https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
-                "hand_landmarker/float16/1/hand_landmarker.task"
+                "Download it by running:  python download_models.py"
             )
 
         self._static_image_mode = static_image_mode

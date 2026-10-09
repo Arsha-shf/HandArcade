@@ -32,6 +32,7 @@ Module layout:
     engine/menu.py (here) -- game list, keyboard handling, the main loop
 """
 
+import os
 import traceback
 
 import cv2
@@ -49,6 +50,7 @@ from engine.camera import init_fullscreen_window, open_camera, show
 from engine.menu_draw import draw_menu
 from engine.menu_input import game_at, make_mouse_callback, window_to_frame_coords
 from engine.menu_state import MenuState, point_in_rect
+from engine.paths import resolve
 from engine.tracking import HandTracker
 from engine.transitions import fade_in, fade_out
 from games.catch import run_catch
@@ -66,7 +68,19 @@ GAMES = [
 
 WINDOW_NAME = "HandArcade"
 # Relative to the project root (engine.audio resolves it), NOT the cwd.
-ARCADE_MUSIC = "assets/music/arcade_theme.mp3"
+ARCADE_MUSIC_BASENAME = "assets/music/arcade_theme"
+ARCADE_MUSIC_EXTENSIONS = (".ogg", ".mp3", ".wav")   # first one that exists wins
+
+
+def _find_arcade_music():
+    for ext in ARCADE_MUSIC_EXTENSIONS:
+        path = ARCADE_MUSIC_BASENAME + ext
+        if os.path.exists(resolve(path)):
+            return path
+    return ARCADE_MUSIC_BASENAME + ".mp3"   # play_music prints a clear "missing file" message
+
+
+ARCADE_MUSIC = _find_arcade_music()
 
 VOLUME_STEP = 0.05
 

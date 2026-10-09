@@ -1,5 +1,4 @@
-opencv-python
-mediapipe
-pillow
-numpy
-ruff
+opencv-python>=4.8
+mediapipe>=0.10
+numpy>=1.24
+pygame>=2.5

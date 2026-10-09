@@ -1,5 +1,6 @@
 # Keep line length reasonable but not overly strict for a small game project
 line-length = 150
+target-version = "py310"
 
 [lint]
 # Rule sets: pyflakes (errors/unused imports), pycodestyle, isort (import order),
