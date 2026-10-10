@@ -84,9 +84,11 @@ def draw_difficulty_select(frame, bests):
                      scale=0.75, color=(0, 200, 230))
     draw_center_text(frame, f"3 - HARD      best {bests['hard']}   (most obstacles hunt you)", y(55),
                      scale=0.75, color=(60, 60, 230))
-    draw_center_text(frame, "Solid shapes can hurt you. Hollow ones pass through.", y(115),
+    draw_center_text(frame, "Solid obstacles can hurt you. Faded ones pass through you.", y(115),
                      scale=0.6, color=COLOR_SECONDARY, thickness=1)
     draw_center_text(frame, "Move your hand closer / farther from the camera to change depth.",
                      y(145), scale=0.6, color=COLOR_SECONDARY, thickness=1)
-    draw_center_text(frame, "ESC menu   Q quit", y(195), scale=0.6, color=COLOR_SECONDARY,
+    draw_center_text(frame, "Spiky mines with a red ring hunt you, but give up after a few seconds.",
+                     y(175), scale=0.6, color=COLOR_SECONDARY, thickness=1)
+    draw_center_text(frame, "ESC menu   Q quit", y(225), scale=0.6, color=COLOR_SECONDARY,
                      thickness=1)

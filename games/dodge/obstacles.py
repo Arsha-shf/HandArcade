@@ -1,21 +1,39 @@
 import math
+import os
 import random
 
 import cv2
 import numpy as np
 
 from engine.layout import ui_scale
+from engine.paths import resolve
+from engine.sprites import draw_sprite, get_sprite_size
 
 from .config import (
+    CHASER_KIND,
+    FALLBACK_LOOK,
+    GHOST_OPACITY,
     MIN_REACTION_SECONDS,
+    NORMAL_KINDS,
     OBSTACLE_ANGLE_SPREAD_DEG,
-    OBSTACLE_COLORS,
     OBSTACLE_EDGE_MARGIN,
-    OBSTACLE_RADIUS_MAX,
-    OBSTACLE_RADIUS_MIN,
-    OBSTACLE_SHAPES,
+    OBSTACLE_RADII,
+    OBSTACLE_SPIN_DEG,
+    OBSTACLE_SPRITES,
     Z_DODGE_THRESHOLD,
 )
+
+_exists_cache = {}
+
+
+def _sprite_exists(path):
+    """Checked once per file."""
+    if path not in _exists_cache:
+        ok = os.path.exists(resolve(path))
+        if not ok:
+            print(f"[dodge] Missing sprite '{path}', drawing a plain shape instead.")
+        _exists_cache[path] = ok
+    return _exists_cache[path]
 
 
 def _spawn_edge_and_velocity(frame_w, frame_h, radius, speed, margin):
@@ -64,7 +82,7 @@ def spawn_obstacle(frame_w, frame_h, speed, player_xy, homing_chance=0.0, turn_r
     """
     ui = ui_scale(frame_h)
     margin = int(OBSTACLE_EDGE_MARGIN * ui)
-    radius = random.randint(int(OBSTACLE_RADIUS_MIN * ui), int(OBSTACLE_RADIUS_MAX * ui))
+    radius = int(random.choice(OBSTACLE_RADII) * ui)
 
     min_dist = min(speed * MIN_REACTION_SECONDS, 0.6 * frame_h)
     best = None
@@ -79,6 +97,9 @@ def spawn_obstacle(frame_w, frame_h, speed, player_xy, homing_chance=0.0, turn_r
     x, y, vx, vy = best
 
     homing = force_homing or random.random() < homing_chance
+    kind = CHASER_KIND if homing else random.choice(NORMAL_KINDS)
+    shape, color = FALLBACK_LOOK[kind]
+    spin = random.uniform(*OBSTACLE_SPIN_DEG[kind]) * random.choice((-1, 1))
     return {
         "x": x,
         "y": y,
@@ -87,8 +108,11 @@ def spawn_obstacle(frame_w, frame_h, speed, player_xy, homing_chance=0.0, turn_r
         "speed": speed,
         "radius": radius,
         "z": random.random(),
-        "shape": random.choice(OBSTACLE_SHAPES),
-        "color": random.choice(OBSTACLE_COLORS),
+        "kind": kind,
+        "shape": shape,
+        "color": color,
+        "angle": random.uniform(0, 360),
+        "spin": spin,
         "homing": homing,
         "turn_rate": turn_rate if homing else 0.0,
         "home_left": homing_seconds if homing else 0.0,
@@ -122,6 +146,7 @@ def update_obstacles(obstacles, frame_w, frame_h, target_x, target_y, dt):
             obs["home_left"] -= dt
         obs["x"] += obs["vx"] * dt
         obs["y"] += obs["vy"] * dt
+        obs["angle"] = (obs["angle"] + obs["spin"] * dt) % 360
 
         r = obs["radius"]
         if 0 <= obs["x"] <= frame_w and 0 <= obs["y"] <= frame_h:
@@ -142,35 +167,43 @@ def is_dangerous(obs, player_z):
     return abs(obs["z"] - player_z) <= Z_DODGE_THRESHOLD
 
 
-def draw_obstacle(frame, obs, player_z, ui=1.0):
-    """Solid + thick outline = can hurt you right now (same depth as you).
-    Hollow outline = at a different depth, passes through you safely.
-    Red outline = still chasing you."""
+def _draw_fallback(frame, obs, danger, chasing, ui):
     x, y, r = int(obs["x"]), int(obs["y"]), obs["radius"]
-    chasing = obs["homing"] and obs["home_left"] > 0
     color = obs["color"]
-    thin = max(1, int(round(2 * ui)))
-
-    if is_dangerous(obs, player_z):
-        fade = 0.5 + 0.5 * obs["z"]
-        fill = tuple(int(c * fade) for c in color)
-        outline = (0, 0, 255) if chasing else (0, 0, 0)
-        thick = max(1, int(round((3 if chasing else 2) * ui)))
-    else:
-        fill = None
-        outline = (60, 60, 200) if chasing else color
-        thick = thin
+    thick = max(1, int(round(2 * ui)))
+    outline = (0, 0, 255) if chasing else ((0, 0, 0) if danger else color)
 
     if obs["shape"] == "circle":
-        if fill:
-            cv2.circle(frame, (x, y), r, fill, -1, cv2.LINE_AA)
+        if danger:
+            cv2.circle(frame, (x, y), r, color, -1, cv2.LINE_AA)
         cv2.circle(frame, (x, y), r, outline, thick, cv2.LINE_AA)
     elif obs["shape"] == "square":
-        if fill:
-            cv2.rectangle(frame, (x - r, y - r), (x + r, y + r), fill, -1)
+        if danger:
+            cv2.rectangle(frame, (x - r, y - r), (x + r, y + r), color, -1)
         cv2.rectangle(frame, (x - r, y - r), (x + r, y + r), outline, thick, cv2.LINE_AA)
     else:
         pts = np.array([(x, y - r), (x - r, y + r), (x + r, y + r)], dtype=np.int32)
-        if fill:
-            cv2.fillPoly(frame, [pts], fill)
+        if danger:
+            cv2.fillPoly(frame, [pts], color)
         cv2.polylines(frame, [pts], True, outline, thick, cv2.LINE_AA)
+
+
+def draw_obstacle(frame, obs, player_z, ui=1.0):
+    """Solid = can hurt you right now (same depth as you). Faded = at a
+    different depth, passes through you safely. A red ring = still chasing."""
+    x, y, r = int(obs["x"]), int(obs["y"]), obs["radius"]
+    danger = is_dangerous(obs, player_z)
+    chasing = obs["homing"] and obs["home_left"] > 0
+
+    path = OBSTACLE_SPRITES[obs["kind"]]
+    if _sprite_exists(path):
+        native = get_sprite_size(path)[0]
+        draw_sprite(frame, path, x, y, scale=round(2 * r / native, 2), angle=obs["angle"],
+                    opacity=1.0 if danger else GHOST_OPACITY)
+        if chasing:
+            # bright ring only while it can actually hurt you; dim when ghosted
+            ring = max(1, int(round((3 if danger else 1) * ui)))
+            ring_color = (0, 0, 255) if danger else (70, 70, 170)
+            cv2.circle(frame, (x, y), r + int(4 * ui), ring_color, ring, cv2.LINE_AA)
+    else:
+        _draw_fallback(frame, obs, danger, chasing, ui)

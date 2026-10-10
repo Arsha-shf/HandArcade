@@ -14,15 +14,39 @@ HAND_SPAN_MAX = 260              # ... = close to the camera
 # Obstacles only hurt when their depth (z) is within this of the player's.
 Z_DODGE_THRESHOLD = 0.38
 
-OBSTACLE_RADIUS_MIN = 12
-OBSTACLE_RADIUS_MAX = 55
-OBSTACLE_SHAPES = ["circle", "square", "triangle"]
-OBSTACLE_COLORS = [
-    (60, 60, 230),
-    (60, 200, 230),
-    (230, 120, 60),
-    (180, 60, 200),
-]
+# --- Obstacle art ---------------------------------------------------------------
+# Sprites are made by tools/build_art.py. Spiky MINES are the chasers; everything
+# else is a normal obstacle. If a sprite is missing, a plain shape is drawn.
+OBSTACLE_SPRITES = {
+    "asteroid": "assets/dodge/asteroid.png",
+    "meteor": "assets/dodge/meteor.png",
+    "crystal": "assets/dodge/crystal.png",
+    "mine": "assets/dodge/mine.png",
+}
+NORMAL_KINDS = ("asteroid", "meteor", "crystal")
+CHASER_KIND = "mine"
+
+# (fallback shape, fallback color BGR) used only when a sprite file is missing
+FALLBACK_LOOK = {
+    "asteroid": ("circle", (110, 120, 130)),
+    "meteor": ("circle", (40, 110, 230)),
+    "crystal": ("triangle", (200, 90, 170)),
+    "mine": ("square", (60, 60, 230)),
+}
+
+# A few fixed sizes (px @720p) instead of any value from 12 to 55: keeps the
+# sprite cache small, and still gives small, medium and big obstacles.
+OBSTACLE_RADII = (12, 15, 19, 24, 30, 37, 45, 55)
+
+# Degrees per second each kind tumbles (min, max); the sign is random.
+OBSTACLE_SPIN_DEG = {
+    "asteroid": (25, 70),
+    "meteor": (20, 60),
+    "crystal": (40, 110),
+    "mine": (15, 45),
+}
+
+GHOST_OPACITY = 0.3          # how see-through an obstacle is at a different depth
 OBSTACLE_EDGE_MARGIN = 10
 OBSTACLE_ANGLE_SPREAD_DEG = 35
 

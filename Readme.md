@@ -18,6 +18,7 @@ Built in Python with OpenCV, MediaPipe and pygame.
 - [Controls](#controls)
 - [Tips for good tracking](#tips-for-good-tracking)
 - [Assets](#assets)
+- [Art](#art)
 - [Where your data is saved](#where-your-data-is-saved)
 - [Project structure](#project-structure)
 - [Tuning and difficulty](#tuning-and-difficulty)
@@ -29,28 +30,29 @@ Built in Python with OpenCV, MediaPipe and pygame.
 ## Games
 
 ### 🍉 Fruit Slice
-Swipe your **index fingertip** through flying fruit. Slice two or more in one
-swipe for a combo bonus. Don't touch the bombs.
+Swipe your **index fingertip** through flying fruit: apples, oranges, watermelons,
+lemons, strawberries and kiwis, each splitting into two cut halves. Slice two or
+more in one swipe for a combo bonus. Don't touch the bombs.
 
 Choose **Easy**, **Medium** or **Hard** before each run. On Easy only bombs
 cost a life; on Medium and Hard, fruit you miss cost a life too. Fruit come in
 bursts that get faster and more frequent the longer you survive.
 
 ### 🟢 Dodge
-Your **palm** controls a little creature on screen. Obstacles fly in from every
-edge and some of them **hunt you**.
+Your **palm** controls a little creature on screen. Asteroids, meteors and
+crystals fly in from every edge, and spiky **mines** hunt you.
 
 - Moving your hand **closer to or farther from the camera** changes your depth.
-- **Solid** shapes are at your depth and can hurt you. **Hollow** shapes are at
-  a different depth and pass through you safely.
-- A red outline means an obstacle is still chasing you. Chasers give up after a
+- **Solid** obstacles are at your depth and can hurt you. **Faded** ones are at a
+  different depth and pass through you safely.
+- A red ring around a mine means it is still chasing you. Mines give up after a
   few seconds.
 - On Medium and Hard, swarms are announced a moment before they arrive.
 
 The game waits for your hand before it starts and pauses if tracking loses it.
 
 ### 🐾 Catch
-Swat falling apples and stars with your **open palm**. Both hands work, and a
+Swat falling apples, stars and gems (the most valuable) with your **open palm**. Both hands work, and a
 fast swipe catches everything along its path. Bombs cost you a miss, and so
 does letting fruit hit the floor. Five misses ends the run, but **ten catches in
 a row heal one miss**.
@@ -141,9 +143,29 @@ reported in the console and the games keep running.
 | --- | --- |
 | `assets/sounds/pop.wav`, `slice.wav`, `hit.wav`, `shield.wav` | Sound effects. `python generate_placeholder_sounds.py` creates simple placeholders and never overwrites files you already have (`--force` does). |
 | `assets/music/arcade_theme.ogg` / `.mp3` / `.wav` | Menu music, played in a loop. Not included. Add your own, ideally a royalty-free loop; `.ogg` loops most smoothly. |
-| `assets/apple.png`, `orange.png`, `watermelon.png`, `lemon.png`, `bomb.png`, `baste.png` (+ `baz.png` as its sliced version) | Fruit Slice sprites: transparent PNGs. Missing sprites are drawn as colored circles. |
+| `assets/*.png` | Fruit Slice and Catch sprites: six fruits with cut halves (`apple.png`, `apple_half.png`, ...), `bomb.png`, `star.png`, `gem.png`, plus the hand-drawn `baste.png` / `baz.png`. Missing sprites are drawn as colored circles. |
+| `assets/dodge/*.png` | Dodge obstacles: `asteroid`, `meteor`, `crystal`, `mine`. Missing sprites are drawn as plain shapes. |
 
-If you use music or art that needs attribution, credit it in this README.
+The generated sprites are original art made by `tools/build_art.py` (see [Art](#art)).
+If you add music or art that needs attribution, credit it in this README.
+
+## Art
+
+All sprites are vector art drawn in code and rendered to transparent PNGs, so
+you can restyle everything in one place.
+
+![All HandArcade sprites](art/preview.png)
+
+- Edit a sprite's function in `tools/build_art.py` (colors, shapes), then run
+  `python tools/build_art.py` (needs `cairosvg`, included in
+  `requirements-dev.txt`). It rewrites `assets/` and `art/preview.png`.
+- Or open the editable files in `art/svg/` with Inkscape or Figma and export a
+  PNG with the same name into `assets/`.
+- Keep the sprites roughly square and trimmed to their edges: the games use the
+  image size as the hit area. Sprites are authored at twice their 720p size so
+  they stay sharp at 1080p.
+- Add a new sprite by writing a function that returns an SVG, adding it to the
+  `SPRITES` table in the build script, and pointing a game at the new file.
 
 ## Where your data is saved
 
@@ -166,9 +188,11 @@ handarcade/
 ├── generate_placeholder_sounds.py
 ├── handarcade.spec          # PyInstaller build config
 ├── requirements.txt         # runtime dependencies
-├── requirements-dev.txt     # + ruff, pyinstaller
+├── requirements-dev.txt     # + ruff, pyinstaller, cairosvg
 ├── ruff.toml
 ├── assets/                  # sprites, sounds, music
+├── art/                     # editable SVG sources + preview.png of every sprite
+├── tools/build_art.py       # draws the sprites and renders them to assets/
 ├── engine/                  # shared code used by every game
 │   ├── menu.py              #   game list, main loop
 │   ├── menu_draw.py         #   menu drawing
@@ -253,6 +277,7 @@ need a camera-permission entry (`NSCameraUsageDescription`) in the app bundle.
 pip install -r requirements-dev.txt
 ruff check .          # lint
 ruff format .         # format
+python tools/build_art.py   # re-render all sprites after editing the art
 ```
 
 ## Acknowledgements

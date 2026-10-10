@@ -22,21 +22,26 @@ from engine.sprites import draw_sprite, get_sprite_size, preload_variants
 
 ASSET_DIR = "assets"   # relative to the project root (engine.paths resolves it)
 
-# (sprite filename, sliced sprite filename or None, fallback color BGR, points,
+ART_PX = 192   # generated sprites (tools/build_art.py) are 192px wide
+
+# (sprite filename, cut-half sprite filename or None, fallback color BGR, points,
 #  fallback radius px @720p, base_scale)
-# base_scale corrects for sprites whose native size isn't ~90px @720p.
+# base_scale = on-screen diameter @720p divided by the sprite's native size.
 FRUIT_TYPES = [
-    ("apple.png", None, (60, 60, 220), 10, 45, 1.0),
-    ("orange.png", None, (0, 150, 255), 10, 45, 1.0),
-    ("watermelon.png", None, (60, 180, 60), 15, 55, 1.0),
-    ("lemon.png", None, (40, 220, 230), 10, 40, 1.0),
-    # baste/baz are 208x209 native px, sized to match watermelon (110px).
+    ("apple.png", "apple_half.png", (60, 60, 220), 10, 45, 90 / ART_PX),
+    ("orange.png", "orange_half.png", (0, 150, 255), 10, 45, 90 / ART_PX),
+    ("watermelon.png", "watermelon_half.png", (60, 180, 60), 15, 55, 110 / ART_PX),
+    ("lemon.png", "lemon_half.png", (40, 220, 230), 10, 40, 84 / ART_PX),
+    ("strawberry.png", "strawberry_half.png", (70, 60, 235), 12, 40, 80 / ART_PX),
+    ("kiwi.png", "kiwi_half.png", (80, 190, 110), 12, 42, 88 / ART_PX),
+    # baste/baz are hand-drawn, 208x209 native px, sized to match watermelon (110px).
     ("baste.png", "baz.png", (90, 140, 200), 12, 55, 110 / 209),
 ]
 
 BOMB_SPRITE = "bomb.png"
 BOMB_COLOR = (40, 40, 40)
 BOMB_RADIUS = 45
+BOMB_BASE_SCALE = 90 / ART_PX
 
 GRAVITY = 900.0          # px/s^2 @720p
 
@@ -74,7 +79,7 @@ def warm_up(ui):
     left during play is a tiny resize/rotate the first time an angle shows
     up -- far too small to notice.)
     """
-    all_types = list(FRUIT_TYPES) + [(BOMB_SPRITE, None, BOMB_COLOR, 0, BOMB_RADIUS, 1.0)]
+    all_types = list(FRUIT_TYPES) + [(BOMB_SPRITE, None, BOMB_COLOR, 0, BOMB_RADIUS, BOMB_BASE_SCALE)]
     for sprite, sliced_sprite, _color, _points, _radius, base_scale in all_types:
         scales = [round(v * base_scale * ui, 3) for v in SCALE_VARIANTS]
         if _has_sprite(sprite):
@@ -113,7 +118,7 @@ class Fruit:
             self.color = BOMB_COLOR
             self.points = 0
             self.fallback_radius = BOMB_RADIUS
-            self.base_scale = 1.0
+            self.base_scale = BOMB_BASE_SCALE
         else:
             (self.sprite, self.sliced_sprite, self.color, self.points,
              self.fallback_radius, self.base_scale) = random.choice(FRUIT_TYPES)

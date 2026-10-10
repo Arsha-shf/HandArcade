@@ -131,7 +131,7 @@ def _get_cached_sprite(path, scale, angle):
     return sprite
 
 
-def draw_sprite(frame, png_path, x, y, scale=1.0, angle=0.0, anchor="center"):
+def draw_sprite(frame, png_path, x, y, scale=1.0, angle=0.0, anchor="center", opacity=1.0):
     """
     Draw a transparent PNG onto a BGR frame at (x, y) with alpha blending.
 
@@ -142,6 +142,7 @@ def draw_sprite(frame, png_path, x, y, scale=1.0, angle=0.0, anchor="center"):
         scale: resize multiplier (1.0 = original size).
         angle: rotation in degrees, CLOCKWISE.
         anchor: "center" or "topleft".
+        opacity: 1.0 = normal, lower values draw the sprite see-through (ghosted).
 
     Sprites partially or fully outside the frame are clipped safely.
     """
@@ -170,8 +171,11 @@ def draw_sprite(frame, png_path, x, y, scale=1.0, angle=0.0, anchor="center"):
     dst = frame[fy1:fy2, fx1:fx2]
 
     # premultiplied "over":  out = src_premult + dst * (1 - alpha)
-    inv_alpha = 1.0 - region[:, :, 3:4].astype(np.float32) * (1.0 / 255.0)
-    out = dst.astype(np.float32) * inv_alpha + region[:, :, :3]
+    alpha = region[:, :, 3:4].astype(np.float32) * (1.0 / 255.0)
+    if opacity >= 1.0:
+        out = dst.astype(np.float32) * (1.0 - alpha) + region[:, :, :3]
+    else:
+        out = dst.astype(np.float32) * (1.0 - alpha * opacity) + region[:, :, :3] * opacity
     dst[:] = out.astype(np.uint8)
 
 
