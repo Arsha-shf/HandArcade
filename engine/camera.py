@@ -49,19 +49,22 @@ _screen_size = None
 
 
 def _get_screen_size():
-    """Fallback only (used when the window size can't be queried). Lazy, so
-    tkinter is never imported unless really needed."""
+    """Fallback only (used when the window size can't be queried).
+    Tk is NOT used: it crashes when OpenCV/MediaPipe are already loaded on macOS."""
     global _screen_size
     if _screen_size is not None:
         return _screen_size
 
     try:
-        import tkinter as tk
+        import subprocess
 
-        root = tk.Tk()
-        root.withdraw()
-        _screen_size = (root.winfo_screenwidth(), root.winfo_screenheight())
-        root.destroy()
+        out = subprocess.check_output(
+            ["osascript", "-e",
+             'tell application "Finder" to get bounds of window of desktop'],
+            text=True, timeout=3,
+        )
+        _, _, w, h = (int(v) for v in out.split(","))
+        _screen_size = (w, h)
         return _screen_size
     except Exception:
         pass
