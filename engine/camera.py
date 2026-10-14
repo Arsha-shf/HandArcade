@@ -28,6 +28,9 @@ Usage in a game loop:
     show(WINDOW_NAME, frame)
 """
 
+import subprocess
+import sys
+
 import cv2
 
 TRACKING_WIDTH = 640
@@ -55,19 +58,18 @@ def _get_screen_size():
     if _screen_size is not None:
         return _screen_size
 
-    try:
-        import subprocess
-
-        out = subprocess.check_output(
-            ["osascript", "-e",
-             'tell application "Finder" to get bounds of window of desktop'],
-            text=True, timeout=3,
-        )
-        _, _, w, h = (int(v) for v in out.split(","))
-        _screen_size = (w, h)
-        return _screen_size
-    except Exception:
-        pass
+    if sys.platform == "darwin":
+        try:
+            out = subprocess.check_output(
+                ["osascript", "-e",
+                 'tell application "Finder" to get bounds of window of desktop'],
+                text=True, timeout=3,
+            )
+            _, _, w, h = (int(v) for v in out.split(","))
+            _screen_size = (w, h)
+            return _screen_size
+        except Exception:
+            pass
 
     try:
         import screeninfo
