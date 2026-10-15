@@ -32,7 +32,6 @@ import numpy as np
 
 from engine.paths import resolve
 
-
 ANGLE_BUCKET_DEG = 5
 _MAX_CACHE_ENTRIES = 800
 

@@ -25,6 +25,7 @@ Usage in a game loop:
 
 import subprocess
 import sys
+
 import cv2
 
 TRACKING_WIDTH = 640

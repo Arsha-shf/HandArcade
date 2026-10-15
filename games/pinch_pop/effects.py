@@ -9,7 +9,6 @@ import random
 
 from engine.tracking import INDEX_FINGER_TIP, MIDDLE_FINGER_MCP, THUMB_TIP, WRIST
 
-
 PINCH_ENTER_RATIO = 0.28
 PINCH_EXIT_RATIO = 0.40
 

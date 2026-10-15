@@ -34,6 +34,7 @@ from engine.menu_state import (
     point_in_rect,
 )
 
+
 def rounded_rect(img, pt1, pt2, radius, color, thickness=-1):
     """Draw a rounded rectangle. thickness=-1 fills it, otherwise outlines it."""
     x1, y1 = pt1
