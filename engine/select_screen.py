@@ -28,28 +28,25 @@ def select_option(cap, title, options, notes=(), window_name="HandArcade"):
         if not success:
             return None
         frame = cv2.flip(frame, 1)
-
         h = frame.shape[0]
         s = ui_scale(h)
         cv2.convertScaleAbs(frame, dst=frame, alpha=0.5)
-
         cy = h // 2
         y = cy - 110 * s
-        draw_center_text(frame, title, y, scale=1.2, thickness=3)
 
+        draw_center_text(frame, title, y, scale=1.2, thickness=3)
         y = cy - 45 * s
+
         for _key, label, color, _value in options:
             draw_center_text(frame, label, y, scale=0.85, color=color)
             y += 50 * s
-
         y += 15 * s
+        
         for note in notes:
             draw_center_text(frame, note, y, scale=0.6, color=COLOR_SECONDARY, thickness=1)
             y += 30 * s
-
         draw_center_text(frame, "ESC menu   Q quit", y + 25 * s, scale=0.6,
                          color=COLOR_SECONDARY, thickness=1)
-
         show(window_name, frame)
 
         key = cv2.waitKey(1) & 0xFF

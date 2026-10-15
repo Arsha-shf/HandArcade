@@ -19,7 +19,7 @@ import random
 from .fruit import GRAVITY, Fruit
 
 BOMB_GRACE_SECONDS = 5.0
-EDGE_MARGIN = 40          # px @720p outside the frame
+EDGE_MARGIN = 40
 
 
 def _pick_edge(edge_weights):
@@ -53,7 +53,7 @@ def _launch(edge, frame_w, frame_h, ui, speed_mult):
         vx = random.uniform(500, 750) * m
         vy = random.uniform(-500, -200) * m
 
-    else:  # right
+    else:
         x = frame_w + margin
         y = random.uniform(frame_h * 0.15, frame_h * 0.85)
         vx = random.uniform(-750, -500) * m
@@ -63,7 +63,6 @@ def _launch(edge, frame_w, frame_h, ui, speed_mult):
 
 
 def spawn_burst(frame_w, frame_h, params, ui, elapsed, free_slots):
-    """Launch 1..burst_max fruit (limited by free_slots). Returns a list."""
     if free_slots <= 0:
         return []
 
@@ -86,7 +85,5 @@ def spawn_burst(frame_w, frame_h, params, ui, elapsed, free_slots):
 
 
 def next_spawn_interval(params, burst_size=1):
-    """Seconds until the next launch. Bigger bursts buy a longer breather, so
-    the fruit-per-second rate stays close to what the preset intends."""
     base = params["spawn_interval"] * (0.6 + 0.4 * burst_size)
     return base * random.uniform(0.7, 1.3)

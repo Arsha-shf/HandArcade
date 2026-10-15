@@ -21,7 +21,7 @@ def window_to_frame_coords(window_name, x, y, frame_w, frame_h):
     try:
         _, _, win_w, win_h = cv2.getWindowImageRect(window_name)
     except Exception:
-        return x, y  # best-effort fallback: assume a 1:1 mapping
+        return x, y
 
     if win_w <= 0 or win_h <= 0 or frame_w <= 0 or frame_h <= 0:
         return x, y
@@ -29,7 +29,6 @@ def window_to_frame_coords(window_name, x, y, frame_w, frame_h):
     scale = min(win_w / frame_w, win_h / frame_h)
     disp_w, disp_h = frame_w * scale, frame_h * scale
     off_x, off_y = (win_w - disp_w) / 2, (win_h - disp_h) / 2
-
     return (x - off_x) / scale, (y - off_y) / scale
 
 
@@ -41,8 +40,6 @@ def slider_at(state, fx, fy):
 
 
 def set_slider_from_x(state, name, fx):
-    """Apply the slider value WITHOUT writing to disk (called on every mouse
-    move while dragging). The caller saves once on mouse release."""
     bx, by, bw, bh = state.volume_bar_rects.get(name, (0, 0, 1, 1))
     pct = max(0.0, min(1.0, (fx - bx) / max(1, bw)))
     if name == "music":
@@ -68,7 +65,6 @@ def make_mouse_callback(window_name, state):
             fx, fy = window_to_frame_coords(window_name, x, y, *state.frame_size)
             state.dragging_slider = slider_at(state, fx, fy)
             if state.dragging_slider is not None:
-                # a plain click on the bar must set the value too
                 set_slider_from_x(state, state.dragging_slider, fx)
             else:
                 state.mouse_click_pending = True

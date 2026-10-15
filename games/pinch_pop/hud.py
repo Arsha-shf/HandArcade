@@ -76,7 +76,6 @@ def draw_hud(frame, score, time_left, now, best, shield=None, frenzy=None):
     draw_text(frame, timer_text, (w - 30 * s, 45 * s), scale=1.0, color=timer_color,
               thickness=2, align="right")
 
-    # combo: only while it is actually still alive, with a draining timer bar
     if score.combo >= 2 and score.is_combo_active(now):
         flavor = _combo_flavor(score.combo)
         text = f"Combo x{score.current_multiplier()}  ({score.combo} in a row)"

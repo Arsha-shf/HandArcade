@@ -20,7 +20,7 @@ import math
 
 SMOOTHING = 0.55
 SWIPE_SPEED_THRESHOLD = 9.0
-CATCH_TTL = 10          # in 30fps-frames
+CATCH_TTL = 10
 MATCH_MAX_DIST = 220
 
 
@@ -51,7 +51,6 @@ class Paw:
         self.x += (raw_x - self.x) * alpha
         self.y += (raw_y - self.y) * alpha
 
-        # velocity in px per 30fps-frame, independent of the real frame rate
         self.vx = (self.x - self.prev_x) / dt_scale
         self.vy = (self.y - self.prev_y) / dt_scale
         speed = math.hypot(self.vx, self.vy)

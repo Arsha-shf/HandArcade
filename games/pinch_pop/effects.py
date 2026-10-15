@@ -9,13 +9,9 @@ import random
 
 from engine.tracking import INDEX_FINGER_TIP, MIDDLE_FINGER_MCP, THUMB_TIP, WRIST
 
-# Pinch thresholds as a RATIO of thumb-to-index distance over palm size
-# (wrist -> middle knuckle). Relative to the hand, so it works the same
-# whether the hand is near or far from the camera, and in any direction
-# (the old threshold used raw normalized x/y, which differ between width and
-# height on a 16:9 frame). Tune these if pinching feels too loose/strict.
-PINCH_ENTER_RATIO = 0.28   # closer than this -> pinched
-PINCH_EXIT_RATIO = 0.40    # farther than this -> released (hysteresis, no flicker)
+
+PINCH_ENTER_RATIO = 0.28
+PINCH_EXIT_RATIO = 0.40
 
 
 def pinch_ratio(hand, frame_shape):
@@ -38,9 +34,6 @@ def pinch_ratio(hand, frame_shape):
 
 
 class HandSmoother:
-    """Smooths each hand's pinch point. alpha is per 30fps-frame; pass dt_scale
-    (1.0 == one 30fps frame) so it behaves the same at any frame rate."""
-
     def __init__(self, alpha=0.55):
         self.alpha = alpha
         self._smoothed = {}
@@ -125,9 +118,6 @@ class HandIdentityTracker:
 
 
 class PinchTracker:
-    """Turns a per-frame pinch ratio into a stable pinched / not-pinched state
-    (with hysteresis so it doesn't flicker at the threshold)."""
-
     def __init__(self, enter_threshold=PINCH_ENTER_RATIO, exit_threshold=PINCH_EXIT_RATIO):
         self.enter_threshold = enter_threshold
         self.exit_threshold = exit_threshold

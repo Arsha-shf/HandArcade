@@ -1,6 +1,8 @@
 """
 tools/build_art.py
 
+Made by AI
+
 Draws every HandArcade sprite as vector art (SVG), renders it to a transparent
 PNG, trims it and fits it into a square canvas, and writes it into assets/.
 Also writes the editable .svg sources to art/svg/ and a preview sheet to
@@ -36,14 +38,10 @@ ASSETS = ROOT / "assets"
 SVG_DIR = ROOT / "art" / "svg"
 PREVIEW = ROOT / "art" / "preview.png"
 
-SIZE = 192          # final sprite canvas (px)
-MARGIN = 3          # empty border inside the canvas
-SUPERSAMPLE = 768   # render size before downscaling (anti-aliasing quality)
-ALPHA_TRIM = 40     # pixels fainter than this don't count when trimming
-
-# ---------------------------------------------------------------------------
-# SVG helpers
-# ---------------------------------------------------------------------------
+SIZE = 192
+MARGIN = 3
+SUPERSAMPLE = 768  
+ALPHA_TRIM = 40 
 
 
 def svg(defs, body):
@@ -142,10 +140,6 @@ def leaf(d, vein, fill_id="leafg"):
 
 
 LEAF_GRADIENT = lg("leafg", [(0, "#9be04a"), (1, "#3a9a22")], 0, 0, 1, 1)
-
-# ---------------------------------------------------------------------------
-# Fruit (whole)
-# ---------------------------------------------------------------------------
 
 APPLE_BODY = ("M100 58 C82 40 36 46 34 96 C33 138 64 172 84 170 C92 169 95 166 100 166 "
               "C105 166 108 169 116 170 C136 172 167 138 166 96 C164 46 118 40 100 58Z")
@@ -256,10 +250,6 @@ def bomb():
             + spark + "</g>")
     return svg(defs, body)
 
-# ---------------------------------------------------------------------------
-# Fruit (cut halves: drawn twice by the game, flying apart)
-# ---------------------------------------------------------------------------
-
 
 def _flesh_scaled(path, cx, cy, scale, fill, stroke):
     return (f'<g transform="translate({cx} {cy}) scale({scale}) translate({-cx} {-cy})">'
@@ -343,10 +333,6 @@ def kiwi_half():
             + rays + '<ellipse cx="100" cy="104" rx="17" ry="14" fill="#f5f9d6"/>' + seeds)
     return svg(defs, body)
 
-# ---------------------------------------------------------------------------
-# Catch items
-# ---------------------------------------------------------------------------
-
 
 def star():
     defs = lg("st", [(0, "#fff59a"), (0.5, "#ffd21a"), (1, "#ff9a00")], 0, 0, 1, 1)
@@ -373,11 +359,6 @@ def gem():
              '<path d="M52 44 L55 34 L58 44 L68 47 L58 50 L55 60 L52 50 L42 47Z" fill="#fff" opacity=".95"/>'
              '<path d="M150 70 L152 63 L154 70 L161 72 L154 74 L152 81 L150 74 L143 72Z" fill="#fff" opacity=".8"/>')
     return svg("", body)
-
-# ---------------------------------------------------------------------------
-# Dodge obstacles
-# ---------------------------------------------------------------------------
-
 
 def asteroid():
     defs = rg("as", [(0, "#b9afa3"), (0.5, "#7d7468"), (1, "#4a443d")], 0.35, 0.3, 0.85)
@@ -410,8 +391,6 @@ def meteor():
 
 def crystal():
     parts = []
-    # long and short shards alternate all the way round; drawn short-first so the
-    # long ones sit on top
     shards = [(a, 62, 24) for a in range(22, 360, 90)] + [(a, 84, 30) for a in range(0, 360, 90)]
     for angle, length, width in shards:
         w = width / 2
@@ -451,12 +430,7 @@ def mine():
     return svg(defs, body)
 
 
-# ---------------------------------------------------------------------------
-# What gets built, and where it goes (relative to assets/)
-# ---------------------------------------------------------------------------
-
 SPRITES = {
-    # Fruit Slice: whole fruit + cut halves
     "apple.png": apple, "apple_half.png": apple_half,
     "orange.png": orange, "orange_half.png": orange_half,
     "watermelon.png": watermelon, "watermelon_half.png": watermelon_half,
@@ -464,16 +438,11 @@ SPRITES = {
     "strawberry.png": strawberry, "strawberry_half.png": strawberry_half,
     "kiwi.png": kiwi, "kiwi_half.png": kiwi_half,
     "bomb.png": bomb,
-    # Catch (also reuses apple.png and bomb.png)
     "star.png": star, "gem.png": gem,
-    # Dodge
     "dodge/asteroid.png": asteroid, "dodge/meteor.png": meteor,
     "dodge/crystal.png": crystal, "dodge/mine.png": mine,
 }
 
-# ---------------------------------------------------------------------------
-# Rendering
-# ---------------------------------------------------------------------------
 
 
 def _premultiplied_resize(img, size):

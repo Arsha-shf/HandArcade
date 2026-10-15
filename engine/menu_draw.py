@@ -34,8 +34,6 @@ from engine.menu_state import (
     point_in_rect,
 )
 
-# --- low-level drawing helpers -------------------------------------------
-
 def rounded_rect(img, pt1, pt2, radius, color, thickness=-1):
     """Draw a rounded rectangle. thickness=-1 fills it, otherwise outlines it."""
     x1, y1 = pt1
@@ -91,10 +89,7 @@ def draw_text_shadow(frame, text, org, font=cv2.FONT_HERSHEY_SIMPLEX, scale=0.9,
     cv2.putText(frame, text, (x, y), font, scale, color, thickness, cv2.LINE_AA)
 
 
-# --- background animation ---------------------------------------------------
-
 def draw_particles(frame, t):
-    """Soft drifting specks behind everything else -- purely decorative."""
     h, w = frame.shape[:2]
     n = 18
     for i in range(n):
@@ -126,8 +121,6 @@ def draw_cursor(frame, pos):
     cv2.circle(frame, (x, y), 2, ACCENT, -1, cv2.LINE_AA)
 
 
-# --- menu drawing ----------------------------------------------------------
-
 def draw_menu(window_name, frame, state, games):
     h, w = frame.shape[:2]
     state.frame_size = (w, h)
@@ -135,8 +128,6 @@ def draw_menu(window_name, frame, state, games):
 
     draw_particles(frame, t)
 
-    # darken the whole frame by 35% (same result as blending black at 0.35,
-    # but in place with no extra full-frame buffers)
     cv2.convertScaleAbs(frame, dst=frame, alpha=0.65)
 
     hover = window_to_frame_coords(window_name, *state.mouse_pos, w, h)
@@ -155,7 +146,6 @@ def draw_title(frame, t):
     cv2.putText(frame, "Click or press 1-4 to play  -  'q' to quit", (40, 92),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, TEXT_MUTED, 1, cv2.LINE_AA)
 
-    # slow glow sweeping under the title -- purely cosmetic
     bar_x1, bar_x2 = 40, pt2[0] - 20
     sweep = (np.sin(t * 1.4) + 1) / 2
     glow_x = int(bar_x1 + sweep * max(0, (bar_x2 - bar_x1 - 60)))
@@ -177,7 +167,6 @@ def draw_game_cards(frame, t, hover, state, games):
     for i, (name, _) in enumerate(games):
         y = start_y + i * (card_h + gap)
 
-        # staggered slide-and-fade entrance each time the menu appears
         local_t = max(0.0, min(1.0, (since_open - i * 0.07) / 0.25))
         eased = 1 - (1 - local_t) ** 3
         x = card_x + int((1 - eased) * 80)
@@ -185,7 +174,7 @@ def draw_game_cards(frame, t, hover, state, games):
         state.game_card_rects.append((x, y, x + card_w, y + card_h))
 
         if eased < 0.05:
-            continue  # nothing worth drawing while still off-screen
+            continue
 
         hovering = eased > 0.99 and point_in_rect(hx, hy, (x, y, x + card_w, y + card_h))
         border = ACCENT if hovering else ACCENT_DIM

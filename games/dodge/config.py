@@ -1,22 +1,16 @@
 WINDOW_NAME = "HandArcade"
 
-# --- Sizes: pixels for a 720px-tall frame; multiplied by ui_scale() at runtime
 PLAYER_RADIUS_MIN = 22
 PLAYER_RADIUS_MAX = 42
 PLAYER_Y_MARGIN_TOP = 70
 PLAYER_Y_MARGIN_BOTTOM = 40
-PLAYER_SMOOTHING_ALPHA = 0.5     # per 30fps-frame (see engine/smoothing.py)
+PLAYER_SMOOTHING_ALPHA = 0.5
 HITBOX_FORGIVENESS = 0.78
 
-HAND_SPAN_MIN = 60               # wrist -> middle-knuckle length (720p px) = far
-HAND_SPAN_MAX = 260              # ... = close to the camera
-
-# Obstacles only hurt when their depth (z) is within this of the player's.
+HAND_SPAN_MIN = 60
+HAND_SPAN_MAX = 260
 Z_DODGE_THRESHOLD = 0.38
 
-# --- Obstacle art ---------------------------------------------------------------
-# Sprites are made by tools/build_art.py. Spiky MINES are the chasers; everything
-# else is a normal obstacle. If a sprite is missing, a plain shape is drawn.
 OBSTACLE_SPRITES = {
     "asteroid": "assets/dodge/asteroid.png",
     "meteor": "assets/dodge/meteor.png",
@@ -26,7 +20,6 @@ OBSTACLE_SPRITES = {
 NORMAL_KINDS = ("asteroid", "meteor", "crystal")
 CHASER_KIND = "mine"
 
-# (fallback shape, fallback color BGR) used only when a sprite file is missing
 FALLBACK_LOOK = {
     "asteroid": ("circle", (110, 120, 130)),
     "meteor": ("circle", (40, 110, 230)),
@@ -34,11 +27,8 @@ FALLBACK_LOOK = {
     "mine": ("square", (60, 60, 230)),
 }
 
-# A few fixed sizes (px @720p) instead of any value from 12 to 55: keeps the
-# sprite cache small, and still gives small, medium and big obstacles.
 OBSTACLE_RADII = (12, 15, 19, 24, 30, 37, 45, 55)
 
-# Degrees per second each kind tumbles (min, max); the sign is random.
 OBSTACLE_SPIN_DEG = {
     "asteroid": (25, 70),
     "meteor": (20, 60),
@@ -46,27 +36,27 @@ OBSTACLE_SPIN_DEG = {
     "mine": (15, 45),
 }
 
-GHOST_OPACITY = 0.3          # how see-through an obstacle is at a different depth
+GHOST_OPACITY = 0.3
 OBSTACLE_EDGE_MARGIN = 10
 OBSTACLE_ANGLE_SPREAD_DEG = 35
 
-# --- Fairness -----------------------------------------------------------------
-GRACE_SECONDS = 1.5              # nothing spawns right after the run starts
-HAND_LOST_PAUSE_SECONDS = 0.4    # hand missing longer than this pauses the game
-MIN_REACTION_SECONDS = 0.45      # spawns are placed so you get at least this long
-SWARM_WARNING_SECONDS = 1.2      # swarm is announced this long before it spawns
+GRACE_SECONDS = 1.5
+HAND_LOST_PAUSE_SECONDS = 0.4
+MIN_REACTION_SECONDS = 0.45
+SWARM_WARNING_SECONDS = 1.2
 
-# --- Difficulty ------------------------------------------------------------------
-# Everything is TIME based and RESOLUTION independent. Each (start, end) pair is
-# blended along an eased curve over `ramp_seconds`, then holds at `end`.
-#   spawn_interval : seconds between spawns
-#   speed          : screen-heights per second (1.0 = crosses the screen in 1s)
-#   homing_chance  : chance a normal obstacle is a chaser
-#   turn_rate      : how sharply chasers steer (per second)
-#   homing_seconds : chasers give up after this long and fly straight, so
-#                    they can always be outlasted
-#   max_active     : cap on obstacles on screen (stops flooding)
-#   swarm_every    : seconds between swarms (0 = none); swarm_size obstacles
+""" Difficulty:
+ Everything is TIME based and RESOLUTION independent. Each (start, end) pair is 
+ blended along an eased curve over `ramp_seconds`, then holds at `end`.
+   spawn_interval : seconds between spawns
+   speed          : screen-heights per second (1.0 = crosses the screen in 1s)
+   homing_chance  : chance a normal obstacle is a chaser
+   turn_rate      : how sharply chasers steer (per second)
+   homing_seconds : chasers give up after this long and fly straight, so they can always be outlasted
+   max_active     : cap on obstacles on screen (stops flooding)
+   swarm_every    : seconds between swarms (0 = none); swarm_size obstacles
+ """
+
 DIFFICULTY_PRESETS = {
     "easy": {
         "ramp_seconds": 90,

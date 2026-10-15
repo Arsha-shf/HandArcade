@@ -58,7 +58,6 @@ def update_player(player, results, frame_w, frame_h, dt):
         hand = results.multi_hand_landmarks[0]
         raw_x, raw_y = get_palm_center(hand, (frame_h, frame_w))
 
-        # normalize to 720p so the near/far range doesn't depend on resolution
         span = get_hand_span(hand, frame_w, frame_h) / ui
         raw_z = (span - HAND_SPAN_MIN) / (HAND_SPAN_MAX - HAND_SPAN_MIN)
         raw_z = max(0.0, min(1.0, raw_z))

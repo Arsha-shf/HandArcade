@@ -7,11 +7,6 @@ Two requirements that fight each other:
   1. Sharp, fullscreen display.
   2. Smooth: MediaPipe must run on SMALL frames.
 
-Solution: capture and display at full camera resolution, but feed the
-tracker a downscaled COPY (same aspect ratio). MediaPipe returns
-normalized landmarks (0-1), so converting them with the full-res
-frame.shape gives accurate full-res pixels at no extra cost.
-
 Display rule (important): show() scales the frame to FIT the window and
 centers it with black bars. It never crops and never stretches. That is
 exactly the mapping engine/menu_input.window_to_frame_coords() assumes,
@@ -30,18 +25,13 @@ Usage in a game loop:
 
 import subprocess
 import sys
-
 import cv2
 
 TRACKING_WIDTH = 640
 
-# Legacy names kept so older imports don't break. Not used by this module.
 TRACKING_SIZE = (640, 360)
 DISPLAY_SIZE = (1920, 1080)
 
-# Capped at 1080p on purpose: every frame is flipped, drawn on, blended and
-# resized in Python. At 1440p/4K that costs more than the tracker does and
-# the camera usually drops its FPS at those sizes anyway.
 _CANDIDATE_RESOLUTIONS = [
     (1920, 1080),
     (1280, 720),
@@ -100,7 +90,6 @@ def open_camera(index=0, target_fps=60):
         if actual_w >= w and actual_h >= h:
             break
 
-    # FPS after resolution: some drivers reset FPS when the mode changes.
     cap.set(cv2.CAP_PROP_FPS, target_fps)
 
     actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -112,8 +101,6 @@ def open_camera(index=0, target_fps=60):
 
 
 def to_tracking_frame(frame):
-    """Downscale for MediaPipe, KEEPING the aspect ratio. (A fixed 640x360
-    would squash a 4:3 camera and distort the hand/face shape.)"""
     h, w = frame.shape[:2]
     if w <= TRACKING_WIDTH:
         return frame
@@ -127,7 +114,6 @@ def init_fullscreen_window(window_name):
 
 
 def _target_size(window_name):
-    """Actual drawable size of the window (works fullscreen or windowed)."""
     try:
         _, _, w, h = cv2.getWindowImageRect(window_name)
         if w > 0 and h > 0:
@@ -138,7 +124,6 @@ def _target_size(window_name):
 
 
 def show(window_name, frame):
-    """Fit `frame` inside the window (preserve aspect, center, black bars)."""
     target_w, target_h = _target_size(window_name)
     frame_h, frame_w = frame.shape[:2]
 

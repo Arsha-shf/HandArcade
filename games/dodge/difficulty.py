@@ -7,13 +7,6 @@ def _lerp(pair, t):
 
 
 def get_difficulty(elapsed_seconds, level):
-    """
-    Difficulty at `elapsed_seconds` into a run. A smooth, continuous ramp
-    (no sudden jumps every few seconds), eased so it gets tough early and
-    then levels off at the preset's maximum.
-
-    Returns a dict; `speed` is in screen-heights per second.
-    """
     preset = DIFFICULTY_PRESETS[level]
     x = min(1.0, max(0.0, elapsed_seconds / preset["ramp_seconds"]))
     e = 1 - (1 - x) ** 2

@@ -18,7 +18,6 @@ import cv2
 
 from engine.layout import ui_scale
 
-# --- Shared style constants (sizes are for a 720px-tall frame) ---------------
 FONT = cv2.FONT_HERSHEY_SIMPLEX
 
 COLOR_PRIMARY = (255, 255, 255)
@@ -72,8 +71,6 @@ def reset_score_animation(label="Score"):
     _score_anim.pop(label, None)
 
 
-# --- ROI helpers ------------------------------------------------------------
-
 def _blend_region(frame, x1, y1, x2, y2, draw, alpha):
     """Draw into a copy of just the region, then blend it back at `alpha`.
     draw(layer, ox, oy) draws using coordinates minus the region origin."""
@@ -87,7 +84,6 @@ def _blend_region(frame, x1, y1, x2, y2, draw, alpha):
     draw(layer, x1, y1)
     frame[y1:y2, x1:x2] = cv2.addWeighted(layer, alpha, roi, 1 - alpha, 0)
 
-
 def _fill_rounded(img, x, y, w, h, radius, color):
     radius = max(1, min(radius, w // 2, h // 2))
     cv2.rectangle(img, (x + radius, y), (x + w - radius, y + h), color, -1)
@@ -95,7 +91,6 @@ def _fill_rounded(img, x, y, w, h, radius, color):
     for cx, cy in [(x + radius, y + radius), (x + w - radius, y + radius),
                    (x + radius, y + h - radius), (x + w - radius, y + h - radius)]:
         cv2.circle(img, (cx, cy), radius, color, -1)
-
 
 def _rounded_panel(frame, x, y, w, h, radius=10, color=COLOR_PANEL, alpha=0.45):
     x, y, w, h, radius = int(x), int(y), int(w), int(h), int(radius)
@@ -105,14 +100,12 @@ def _rounded_panel(frame, x, y, w, h, radius=10, color=COLOR_PANEL, alpha=0.45):
 
     _blend_region(frame, x, y, x + w + 1, y + h + 1, draw, alpha)
 
-
 def _put_text_shadow(frame, text, pos, scale, color, thickness, s=1.0, shadow_color=(0, 0, 0)):
     x, y = pos
     off = max(1, int(round(2 * s)))
     cv2.putText(frame, text, (x + off, y + off), FONT, scale, shadow_color,
                 thickness + 1, cv2.LINE_AA)
     cv2.putText(frame, text, (x, y), FONT, scale, color, thickness, cv2.LINE_AA)
-
 
 def _put_text_alpha(frame, text, org, scale, color, thickness, alpha):
     """Text at partial opacity, touching only its own bounding box."""
@@ -125,14 +118,10 @@ def _put_text_alpha(frame, text, org, scale, color, thickness, alpha):
 
     _blend_region(frame, x - pad, y - th - pad, x + tw + pad, y + base + pad, draw, alpha)
 
-
 def _center_alpha(frame, text, y, scale, color, thickness, alpha):
     w = frame.shape[1]
     (tw, _), _ = cv2.getTextSize(text, FONT, scale, thickness)
     _put_text_alpha(frame, text, ((w - tw) // 2, int(y)), scale, color, thickness, alpha)
-
-
-# --- public drawing functions ---------------------------------------------------
 
 def draw_score(frame, score, label="Score", animate=True):
     """Main score readout, top-left, with count-up animation and pulse."""
@@ -168,7 +157,6 @@ def draw_score(frame, score, label="Score", animate=True):
                    52 * s, radius=10 * s)
     _put_text_shadow(frame, text, (x, y), scale, color, th, s)
 
-
 def draw_stats(frame, stats, start_y=None):
     """Secondary stat lines under the score: draw_stats(frame, ["Dodged: 3"])."""
     s = _ui(frame)
@@ -179,7 +167,6 @@ def draw_stats(frame, stats, start_y=None):
         _put_text_shadow(frame, line, (int(30 * s), y), STAT_SCALE * s,
                          COLOR_SECONDARY, _th(STAT_THICKNESS, s), s)
 
-
 def draw_hints(frame, text="ESC = menu   q = quit"):
     """Bottom-left control hints on a subtle panel strip."""
     s = _ui(frame)
@@ -189,7 +176,6 @@ def draw_hints(frame, text="ESC = menu   q = quit"):
     y = h - int(HINT_MARGIN_BOTTOM * s)
     _rounded_panel(frame, 10 * s, h - 45 * s, tw + 20 * s, 35 * s, radius=8 * s, alpha=0.35)
     _put_text_shadow(frame, text, (int(20 * s), y), scale, COLOR_HINT, th, s)
-
 
 def draw_center_text(frame, text, y, scale=1.0, color=COLOR_PRIMARY, thickness=2, alpha=1.0):
     """Horizontally centered text at pixel row `y`. scale/thickness are in
@@ -202,7 +188,6 @@ def draw_center_text(frame, text, y, scale=1.0, color=COLOR_PRIMARY, thickness=2
         _put_text_shadow(frame, text, ((w - tw) // 2, int(y)), sc, color, th, s)
     else:
         _center_alpha(frame, text, y, sc, color, th, alpha)
-
 
 def draw_text(frame, text, pos, scale=0.6, color=COLOR_PRIMARY, thickness=1, align="left"):
     """Text with shadow at pixel `pos` (x, baseline y). scale/thickness are in
@@ -217,7 +202,6 @@ def draw_text(frame, text, pos, scale=0.6, color=COLOR_PRIMARY, thickness=1, ali
         x -= tw // 2
     _put_text_shadow(frame, text, (x, y), sc, color, th, s)
 
-
 def draw_popup(frame, x, y, text, color=COLOR_PRIMARY, scale=0.9, life=1.0):
     """Floating score popup centered on (x, y). life goes 1.0 -> 0.0 and
     shrinks/thins the text as it expires. The caller moves y upward."""
@@ -229,7 +213,6 @@ def draw_popup(frame, x, y, text, color=COLOR_PRIMARY, scale=0.9, life=1.0):
     org = (int(x - tw / 2), int(y))
     cv2.putText(frame, text, org, FONT, sc, (0, 0, 0), th + 2, cv2.LINE_AA)
     cv2.putText(frame, text, org, FONT, sc, color, th, cv2.LINE_AA)
-
 
 def draw_game_over(frame, score, message=None, lines=None, retry=True, progress=1.0,
                    hint=None, extra=None):
@@ -253,11 +236,9 @@ def draw_game_over(frame, score, message=None, lines=None, retry=True, progress=
     cy = h // 2
     extras = [extra] if isinstance(extra, str) else list(extra or [])
 
-    # Dim background (first 30%)
     dim_eased = _ease_out_cubic(min(1.0, p / 0.3))
     cv2.convertScaleAbs(frame, dst=frame, alpha=1.0 - 0.55 * dim_eased)
 
-    # Title: bounces in from above (0% -> 45%)
     title_p = max(0.0, min(1.0, p / 0.45))
     if title_p > 0.0:
         bounce = _ease_out_back(title_p)
@@ -266,12 +247,10 @@ def draw_game_over(frame, score, message=None, lines=None, retry=True, progress=
         _center_alpha(frame, "GAME OVER", cy - 60 * s + y_offset, title_scale,
                       COLOR_DANGER, _th(3, s), min(1.0, title_p * 2.0))
 
-    # Message (35% -> 60%)
     message_p = max(0.0, min(1.0, (p - 0.35) / 0.25))
     if message and message_p > 0.02:
         _center_alpha(frame, message, cy - 10 * s, 0.7 * s, COLOR_PRIMARY, _th(2, s), message_p)
 
-    # Score counts up (45% -> 80%)
     score_p = max(0.0, min(1.0, (p - 0.45) / 0.35))
     if score_p > 0.0:
         eased = _ease_out_cubic(score_p)
@@ -282,7 +261,6 @@ def draw_game_over(frame, score, message=None, lines=None, retry=True, progress=
             _center_alpha(frame, line, cy + (66 + 34 * i) * s, 0.7 * s,
                           COLOR_ACCENT if i == 0 else COLOR_SECONDARY, _th(2, s), eased)
 
-    # Hint last (75% -> 100%)
     hint_p = max(0.0, min(1.0, (p - 0.75) / 0.25))
     if hint_p > 0.02:
         if hint is None:

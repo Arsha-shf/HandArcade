@@ -39,7 +39,7 @@ def download(name, url, force=False):
         with urllib.request.urlopen(url, timeout=30) as response, open(tmp, "wb") as out:
             while chunk := response.read(1 << 16):
                 out.write(chunk)
-        tmp.replace(dest)   # only appears under its real name once complete
+        tmp.replace(dest)
     except OSError as e:
         tmp.unlink(missing_ok=True)
         print(f"Failed to download {name}: {e}", file=sys.stderr)

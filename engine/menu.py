@@ -58,7 +58,6 @@ from games.dodge import run_dodge
 from games.fruit_slice import run_fruit_slice
 from games.pinch_pop import run_pinch_pop
 
-# Ordered so list index + 1 == the number key that launches it
 GAMES = [
     ("Fruit Slice", run_fruit_slice),
     ("Dodge", run_dodge),
@@ -67,9 +66,8 @@ GAMES = [
 ]
 
 WINDOW_NAME = "HandArcade"
-# Relative to the project root (engine.audio resolves it), NOT the cwd.
 ARCADE_MUSIC_BASENAME = "assets/music/arcade_theme"
-ARCADE_MUSIC_EXTENSIONS = (".ogg", ".mp3", ".wav")   # first one that exists wins
+ARCADE_MUSIC_EXTENSIONS = (".ogg", ".mp3", ".wav")
 
 
 def _find_arcade_music():
@@ -77,8 +75,7 @@ def _find_arcade_music():
         path = ARCADE_MUSIC_BASENAME + ext
         if os.path.exists(resolve(path)):
             return path
-    return ARCADE_MUSIC_BASENAME + ".mp3"   # play_music prints a clear "missing file" message
-
+    return ARCADE_MUSIC_BASENAME + ".mp3"
 
 ARCADE_MUSIC = _find_arcade_music()
 
@@ -86,7 +83,6 @@ VOLUME_STEP = 0.05
 
 
 def _handle_audio_key(key):
-    """Returns True if the key was an audio control and was handled."""
     if key == ord("m"):
         toggle_mute()
         return True
@@ -106,10 +102,6 @@ def _handle_audio_key(key):
 
 
 def _show_menu_loop(cap, state):
-    """
-    Display the menu until the player picks a game (key or click) or quits.
-    Returns an int (index into GAMES) or the string "quit".
-    """
     state.reset_for_new_session()
 
     while True:
@@ -161,24 +153,18 @@ def run_menu():
                 choice = _show_menu_loop(cap, state)
                 if choice == "quit":
                     break
-
                 name, run_game = GAMES[choice]
                 print(f"Launching {name}...")
-
                 fade_out(cap, WINDOW_NAME)
+                
                 try:
                     result = run_game(cap, tracker)
                 except Exception:
-                    # A bug in one game shouldn't kill the whole arcade.
                     traceback.print_exc()
                     result = None
                 fade_in(cap, WINDOW_NAME)
-
                 if result == "quit":
                     break
-
-                # No-op if the arcade theme is still playing; restarts it if a
-                # game stopped or replaced the music.
                 play_music(ARCADE_MUSIC)
         finally:
             cap.release()

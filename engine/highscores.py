@@ -7,7 +7,6 @@ Stored in the per-user data folder, so they survive packaging.
     from engine import highscores
     best = highscores.get_best("catch")
     if highscores.submit("catch", score):   # True only for a new best
-        ...
 """
 
 import json

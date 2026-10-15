@@ -38,15 +38,15 @@ WINDOW_NAME = "HandArcade"
 HIGHSCORE_KEY = "catch"
 
 MAX_MISSES = 5
-HEAL_EVERY = 10              # every N catches in a row heals one miss
-PALM_CATCH_RADIUS = 60       # px at 720p; scaled by ui
-POPUP_FRAMES = 18            # in 30fps-frames
+HEAL_EVERY = 10
+PALM_CATCH_RADIUS = 60
+POPUP_FRAMES = 18
 
 TARGET_DT = 1.0 / 30.0
 MIN_DT_SCALE = 0.2
 MAX_DT_SCALE = 3.0
 
-SHAKE_DURATION = 8           # in 30fps-frames
+SHAKE_DURATION = 8
 SHAKE_MAGNITUDE = 14
 
 GAME_OVER_ANIM_DURATION = 0.5
@@ -106,7 +106,7 @@ def run_catch(cap, tracker):
     game_over_start = None
     game_over_message = ""
     game_over_extra = None
-    popups = []        # [x, y, text, color, ttl]
+    popups = []
     particles = []
     shake_frames = 0.0
 

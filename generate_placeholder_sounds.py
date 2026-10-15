@@ -22,7 +22,7 @@ import numpy as np
 
 OUT_DIR = Path(__file__).resolve().parent / "assets" / "sounds"
 SAMPLE_RATE = 44100
-ATTACK_S = 0.004   # tiny fade-in so playback doesn't start with a click
+ATTACK_S = 0.004  
 
 
 def _tone(segments, volume=0.5):
@@ -50,16 +50,16 @@ def _write_wav(path, samples):
     pcm = (np.clip(samples, -1.0, 1.0) * 32767).astype("<i2")
     with wave.open(str(path), "w") as f:
         f.setnchannels(1)
-        f.setsampwidth(2)   # 16-bit
+        f.setsampwidth(2) 
         f.setframerate(SAMPLE_RATE)
         f.writeframes(pcm.tobytes())
 
 
 SOUNDS = {
-    "pop.wav": [(600, 1100, 0.12)],                 # quick rising blip
-    "slice.wav": [(1900, 900, 0.09)],               # fast falling swish
-    "hit.wav": [(240, 110, 0.25)],                  # low thud
-    "shield.wav": [(660, 660, 0.08), (990, 990, 0.12)],   # two-note chime
+    "pop.wav": [(600, 1100, 0.12)],     
+    "slice.wav": [(1900, 900, 0.09)],   
+    "hit.wav": [(240, 110, 0.25)],  
+    "shield.wav": [(660, 660, 0.08), (990, 990, 0.12)],  
 }
 
 

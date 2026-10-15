@@ -32,22 +32,15 @@ import numpy as np
 
 from engine.paths import resolve
 
-# Rotation is snapped to this many degrees so a continuously spinning sprite
-# reuses cached rotations. 5 deg -> 72 variants per (sprite, scale): looks
-# continuous, and 72 x 3 sprites x a few scales stays well under the cap.
+
 ANGLE_BUCKET_DEG = 5
 _MAX_CACHE_ENTRIES = 800
 
-_base_cache = {}                 # path -> premultiplied BGRA uint8
-_sprite_cache = OrderedDict()    # (path, scale, angle) -> premultiplied BGRA uint8
+_base_cache = {}
+_sprite_cache = OrderedDict() 
 
 
 def _load_sprite(path):
-    """
-    Load a PNG once and return it as premultiplied BGRA uint8.
-    Raises FileNotFoundError if the path is bad: a silently-missing sprite is
-    worse than a loud crash while developing.
-    """
     cached = _base_cache.get(path)
     if cached is not None:
         return cached
@@ -56,13 +49,13 @@ def _load_sprite(path):
     if image is None:
         raise FileNotFoundError(f"Could not load sprite: {path}")
 
-    if image.dtype != np.uint8:  # e.g. 16-bit PNG
+    if image.dtype != np.uint8:
         image = cv2.convertScaleAbs(image, alpha=255.0 / np.iinfo(image.dtype).max)
 
     if image.ndim == 2:
         image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGRA)
     elif image.shape[2] == 3:
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2BGRA)  # adds opaque alpha
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2BGRA)
 
     alpha = image[:, :, 3:4].astype(np.float32) * (1.0 / 255.0)
     premult = image.copy()
@@ -170,7 +163,6 @@ def draw_sprite(frame, png_path, x, y, scale=1.0, angle=0.0, anchor="center", op
     region = sprite[sy1:sy2, sx1:sx2]
     dst = frame[fy1:fy2, fx1:fx2]
 
-    # premultiplied "over":  out = src_premult + dst * (1 - alpha)
     alpha = region[:, :, 3:4].astype(np.float32) * (1.0 / 255.0)
     if opacity >= 1.0:
         out = dst.astype(np.float32) * (1.0 - alpha) + region[:, :, :3]

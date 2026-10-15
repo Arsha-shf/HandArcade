@@ -17,21 +17,14 @@ import cv2
 
 from engine.camera import show
 
-_STEPS = 10          # number of frames the fade takes
-_STEP_DELAY_MS = 15  # ms per step -> ~150ms total fade, feels snappy not sluggish
-
+_STEPS = 10
+_STEP_DELAY_MS = 15
 
 def _blend_to_black(frame, alpha):
-    """alpha=0 -> original frame, alpha=1 -> fully black."""
     return cv2.convertScaleAbs(frame, alpha=1 - alpha)
 
 
 def fade_out(cap, window_name, steps=_STEPS, delay_ms=_STEP_DELAY_MS):
-    """
-    Grab the current camera frame and fade it to black.
-    Call this right before switching away from the current screen
-    (menu -> game, or game -> menu).
-    """
     success, frame = cap.read()
     if not success:
         return
@@ -44,10 +37,7 @@ def fade_out(cap, window_name, steps=_STEPS, delay_ms=_STEP_DELAY_MS):
 
 
 def fade_in(cap, window_name, steps=_STEPS, delay_ms=_STEP_DELAY_MS):
-    """
-    Grab a fresh camera frame and fade in from black.
-    Call this right after switching to a new screen, before its own loop starts.
-    """
+
     success, frame = cap.read()
     if not success:
         return

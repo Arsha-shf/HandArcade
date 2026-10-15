@@ -20,21 +20,16 @@ import sys
 
 def project_root():
     if getattr(sys, "frozen", False):
-        # PyInstaller one-file: _MEIPASS. One-folder: next to the exe.
         return getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 
 def resource_path(*parts):
     return os.path.join(project_root(), *parts)
 
-
 def resolve(path):
-    """Absolute paths pass through; relative ones are anchored to the project root."""
     if os.path.isabs(path):
         return path
     return os.path.join(project_root(), path)
-
 
 def user_data_dir(app_name="HandArcade"):
     if sys.platform == "win32":

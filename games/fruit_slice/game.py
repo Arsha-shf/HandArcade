@@ -32,17 +32,16 @@ from .spawner import next_spawn_interval, spawn_burst
 
 WINDOW_NAME = "HandArcade"
 
-TRAIL_LEN = 6                # fingertip positions kept for the swipe trail
-MAX_DT = 0.05                # a longer hiccup is treated as 50ms
+TRAIL_LEN = 6 
+MAX_DT = 0.05 
 FPS_SAMPLE_COUNT = 30
 GAME_OVER_ANIM_DURATION = 0.5
 
 SOUND_SLICE = "assets/sounds/slice.wav"
 SOUND_BOMB = "assets/sounds/hit.wav"
 
-COMBO_BONUS = 5              # points per fruit when 2+ are sliced in one swipe-frame
+COMBO_BONUS = 5    
 
-# slice particle burst (px values @720p)
 PARTICLE_LIFETIME = 0.4
 PARTICLE_COUNT = 14
 PARTICLE_GRAVITY = 500.0
@@ -51,7 +50,7 @@ CURSOR_RADIUS = 12
 CURSOR_COLOR_IDLE = (255, 255, 255)
 CURSOR_COLOR_SLICE = (0, 255, 255)
 
-FLASH_DURATION = 0.15        # red flash when a bomb is sliced
+FLASH_DURATION = 0.15  
 POPUP_LIFETIME = 0.8
 
 DIFFICULTY_OPTIONS = [
@@ -94,7 +93,7 @@ class _Round:
 
         self.fruits = []
         self.particles = []
-        self.popups = []       # [x, y, text, color, life_seconds_left]
+        self.popups = [] 
         self.trail = []
         self.flash = 0.0
         self.over = False
@@ -105,7 +104,6 @@ class _Round:
         self.t += dt
         params = get_difficulty(self.t, self.level)
 
-        # --- swipe trail ----------------------------------------------------
         if fingertip is not None:
             self.trail.append(fingertip)
             if len(self.trail) > TRAIL_LEN:
@@ -113,7 +111,6 @@ class _Round:
         else:
             self.trail = []
 
-        # --- spawn ----------------------------------------------------------
         if self.t >= self.next_spawn:
             live = sum(1 for f in self.fruits if not f.sliced)
             burst = spawn_burst(self.frame_w, self.frame_h, params, ui, self.t,
@@ -122,9 +119,8 @@ class _Round:
                 self.fruits.extend(burst)
                 self.next_spawn = self.t + next_spawn_interval(params, len(burst))
             else:
-                self.next_spawn = self.t + 0.1   # screen is full: check again shortly
+                self.next_spawn = self.t + 0.1
 
-        # --- physics, misses, slicing ------------------------------------------
         sliced_fruit = []
         bomb_hit = False
         padding = SLICE_PADDING * ui
@@ -281,7 +277,6 @@ def run_fruit_slice(cap, tracker, difficulty=None):
                 else:
                     over_extra = f"Best: {best}"
         else:
-            # let the last halves/particles finish animating
             for fruit in rnd.fruits:
                 fruit.update(dt)
             _update_particles(rnd.particles, dt, ui)
@@ -290,7 +285,6 @@ def run_fruit_slice(cap, tracker, difficulty=None):
             fruit.draw(frame)
         _draw_particles(frame, rnd.particles, ui)
 
-        # swipe trail, faded (older points thinner)
         if len(rnd.trail) >= 2:
             for i in range(1, len(rnd.trail)):
                 thickness = max(1, int(6 * ui * i / len(rnd.trail)))
@@ -308,7 +302,6 @@ def run_fruit_slice(cap, tracker, difficulty=None):
                                   life=min(1.0, life / POPUP_LIFETIME))
 
         if rnd.flash > 0:
-            # in-place red flash: add red to every pixel
             red = int(150 * rnd.flash / FLASH_DURATION)
             cv2.add(frame, (0, 0, red, 0), dst=frame)
 

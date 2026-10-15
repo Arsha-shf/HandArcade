@@ -20,13 +20,10 @@ import cv2
 from engine.paths import resolve
 from engine.sprites import draw_sprite, get_sprite_size, preload_variants
 
-ASSET_DIR = "assets"   # relative to the project root (engine.paths resolves it)
+ASSET_DIR = "assets"
 
-ART_PX = 192   # generated sprites (tools/build_art.py) are 192px wide
+ART_PX = 192
 
-# (sprite filename, cut-half sprite filename or None, fallback color BGR, points,
-#  fallback radius px @720p, base_scale)
-# base_scale = on-screen diameter @720p divided by the sprite's native size.
 FRUIT_TYPES = [
     ("apple.png", "apple_half.png", (60, 60, 220), 10, 45, 90 / ART_PX),
     ("orange.png", "orange_half.png", (0, 150, 255), 10, 45, 90 / ART_PX),
@@ -34,7 +31,6 @@ FRUIT_TYPES = [
     ("lemon.png", "lemon_half.png", (40, 220, 230), 10, 40, 84 / ART_PX),
     ("strawberry.png", "strawberry_half.png", (70, 60, 235), 12, 40, 80 / ART_PX),
     ("kiwi.png", "kiwi_half.png", (80, 190, 110), 12, 42, 88 / ART_PX),
-    # baste/baz are hand-drawn, 208x209 native px, sized to match watermelon (110px).
     ("baste.png", "baz.png", (90, 140, 200), 12, 55, 110 / 209),
 ]
 
@@ -43,15 +39,13 @@ BOMB_COLOR = (40, 40, 40)
 BOMB_RADIUS = 45
 BOMB_BASE_SCALE = 90 / ART_PX
 
-GRAVITY = 900.0          # px/s^2 @720p
+GRAVITY = 900.0
 
-# A small fixed set of size variations (instead of a continuous random float)
-# keeps the number of distinct sprite-cache entries small.
 SCALE_VARIANTS = (0.85, 0.95, 1.05, 1.15)
 
-SLICE_PADDING = 10       # px @720p: forgiving slice reach around fruit
-BOMB_HITBOX = 0.85       # bombs are hit a little less easily than they look
-SLICED_LIFETIME = 0.35   # seconds the two halves stay on screen
+SLICE_PADDING = 10
+BOMB_HITBOX = 0.85
+SLICED_LIFETIME = 0.35
 
 _exists_cache = {}
 
@@ -61,7 +55,6 @@ def _sprite_path(filename):
 
 
 def _has_sprite(filename):
-    """Checked once per file, not once per spawned fruit."""
     if filename not in _exists_cache:
         ok = os.path.exists(resolve(_sprite_path(filename)))
         if not ok:
@@ -103,8 +96,6 @@ def _draw_placeholder(frame, x, y, radius, color, is_bomb, ui):
 
 
 class Fruit:
-    """A single fruit (or bomb) with projectile physics."""
-
     def __init__(self, x, y, vx, vy, frame_w, frame_h, ui=1.0, speed_mult=1.0, is_bomb=False):
         self.frame_w = frame_w
         self.frame_h = frame_h
@@ -130,15 +121,14 @@ class Fruit:
 
         self.variance_scale = random.choice(SCALE_VARIANTS)
         self.sprite_scale = round(self.variance_scale * self.base_scale * ui, 3)
-        self.placeholder_scale = self.variance_scale * ui   # for the fallback circle
-
+        self.placeholder_scale = self.variance_scale * ui  
         self.angle = random.uniform(0, 360)
-        self.spin_speed = random.uniform(-120, 120) * speed_mult   # deg/sec, visual only
+        self.spin_speed = random.uniform(-120, 120) * speed_mult 
 
         self.sliced = False
         self.slice_age = 0.0
-        self.alive = True      # False once it should be removed from the list
-        self.missed = False    # True if it left the play area without being sliced
+        self.alive = True 
+        self.missed = False 
 
         self.has_sprite = _has_sprite(self.sprite)
         if self.has_sprite:
@@ -189,7 +179,6 @@ class Fruit:
     def slice(self):
         self.sliced = True
         self.slice_age = 0.0
-        # outward kick for a nicer pop
         self.vx += random.uniform(-80, 80) * self.ui
         self.vy -= 120 * self.ui
 
@@ -203,9 +192,7 @@ class Fruit:
     def draw(self, frame):
         if self.sliced:
             offset = self.slice_age * 160 * self.ui
-
-            # dedicated sliced sprite (e.g. baz.png for baste.png) if there is
-            # one, else two shrunken copies of the whole-fruit sprite.
+            
             if self.sliced_sprite:
                 name, scale = self.sliced_sprite, self.sprite_scale
                 has = _has_sprite(self.sliced_sprite)

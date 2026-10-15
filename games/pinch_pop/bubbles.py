@@ -59,7 +59,7 @@ _GRAVITY = 260.0
 _CHAIN_RADIUS = 235.0
 _MAX_PARTICLES = 260
 
-PINCH_PADDING = 10   # px @720p: extra reach around a bubble when pinching
+PINCH_PADDING = 10
 
 
 def _distance(x1, y1, x2, y2):
@@ -244,9 +244,6 @@ class BubbleManager:
         return random.choices(kinds, weights=[weights[k] for k in kinds], k=1)[0]
 
     def _pick_x(self, frame_w, frame_h):
-        """Of a few random columns, take the one farthest from bubbles that
-        are still near the bottom, so new bubbles don't spawn on top of each
-        other."""
         margin = 50 * self.ui
         lo, hi = margin, max(margin + 1, frame_w - margin)
         low_band = [b for b in self.bubbles if b.y > frame_h * 0.7]

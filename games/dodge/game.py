@@ -37,7 +37,7 @@ DIFFICULTY_KEYS = {
 }
 
 GAME_OVER_ANIM_DURATION = 0.5
-MAX_DT = 0.05   # a hiccup longer than this is treated as 50ms (no teleporting obstacles)
+MAX_DT = 0.05
 
 
 def _best_key(level):
@@ -71,14 +71,14 @@ def _new_run(frame_w, frame_h):
     return {
         "player": make_player_state(frame_w, frame_h),
         "obstacles": [],
-        "t": 0.0,                 # seconds survived (excludes waiting/paused time)
+        "t": 0.0,
         "spawn_timer": 0.0,
         "swarm_timer": 0.0,
-        "swarm_warning": None,    # seconds left before a swarm spawns, or None
+        "swarm_warning": None,
         "dodged": 0,
         "score": 0,
         "alive": True,
-        "started": False,         # becomes True once a hand is first seen
+        "started": False,
         "hand_lost": 0.0,
         "over_start": None,
         "message": "",
@@ -93,7 +93,7 @@ def _step(run, dt, level, frame_w, frame_h):
     diff = get_difficulty(t, level)
     player = run["player"]
     obstacles = run["obstacles"]
-    speed_px = diff["speed"] * frame_h           # screen-heights/s -> px/s
+    speed_px = diff["speed"] * frame_h
     target = (player["x"], player["y"])
 
     if t >= GRACE_SECONDS:
@@ -111,11 +111,11 @@ def _step(run, dt, level, frame_w, frame_h):
             if run["swarm_warning"] is None:
                 run["swarm_timer"] += dt
                 if run["swarm_timer"] >= diff["swarm_every"]:
-                    run["swarm_warning"] = SWARM_WARNING_SECONDS   # announce first...
+                    run["swarm_warning"] = SWARM_WARNING_SECONDS
                     run["swarm_timer"] = 0.0
             else:
                 run["swarm_warning"] -= dt
-                if run["swarm_warning"] <= 0:                      # ...then spawn
+                if run["swarm_warning"] <= 0:
                     for _ in range(diff["swarm_size"]):
                         obstacles.append(spawn_obstacle(
                             frame_w, frame_h, speed_px * 1.1, target,
@@ -167,7 +167,7 @@ def run_dodge(cap, tracker):
         paused = False
         if run["alive"]:
             if not run["started"]:
-                run["started"] = player["hand_visible"]      # wait for your hand
+                run["started"] = player["hand_visible"]
             else:
                 run["hand_lost"] = 0.0 if player["hand_visible"] else run["hand_lost"] + dt
                 paused = run["hand_lost"] > HAND_LOST_PAUSE_SECONDS

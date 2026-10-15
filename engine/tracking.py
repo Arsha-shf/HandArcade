@@ -37,8 +37,7 @@ from engine.paths import resource_path
 #     https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
 _DEFAULT_MODEL_PATH = resource_path("engine", "models", "hand_landmarker.task")
 
-# Landmark indices (standard 21-point hand topology, unchanged from the
-# legacy API's mp_hands.HandLandmark enum values).
+
 WRIST = 0
 THUMB_TIP = 4
 INDEX_FINGER_MCP = 5
@@ -52,7 +51,6 @@ RING_FINGER_TIP = 16
 PINKY_PIP = 18
 PINKY_TIP = 20
 
-# Fingertip / PIP joint pairs used to decide if a finger is "curled"
 _FINGER_TIP_PIP_PAIRS = [
     (INDEX_FINGER_TIP, INDEX_FINGER_PIP),
     (MIDDLE_FINGER_TIP, MIDDLE_FINGER_PIP),
@@ -62,7 +60,6 @@ _FINGER_TIP_PIP_PAIRS = [
 
 
 class _HandLandmarksProxy:
-    """Mimics the old NormalizedLandmarkList: exposes `.landmark` as a list of points."""
 
     __slots__ = ("landmark",)
 
@@ -71,7 +68,6 @@ class _HandLandmarksProxy:
 
 
 class _HandednessProxy:
-    """Mimics the old `multi_handedness[i].classification[0].label/.score` shape."""
 
     class _Classification:
         __slots__ = ("label", "score")
@@ -87,7 +83,6 @@ class _HandednessProxy:
 
 
 class _ResultsProxy:
-    """Mimics the old `results` object returned by mp.solutions.hands.Hands.process()."""
 
     __slots__ = ("multi_hand_landmarks", "multi_handedness")
 
@@ -99,7 +94,6 @@ class _ResultsProxy:
 
 
 class HandTracker:
-    """Thin wrapper around mp.tasks.vision.HandLandmarker with the old Hands()-like interface."""
 
     def __init__(
         self,
@@ -143,8 +137,6 @@ class HandTracker:
         if self._static_image_mode:
             result = self._landmarker.detect(mp_image)
         else:
-            # Real wall-clock ms: the model's temporal tracking/smoothing assumes
-            # timestamps are milliseconds. Must be strictly increasing.
             ts_ms = int(time.monotonic() * 1000)
             if ts_ms <= self._last_ts_ms:
                 ts_ms = self._last_ts_ms + 1
@@ -180,18 +172,11 @@ class HandTracker:
 
 
 def _to_pixel(landmark, frame_shape):
-    """Convert a normalized MediaPipe landmark (0-1 range) to pixel coords."""
     h, w = frame_shape[:2]
     return int(landmark.x * w), int(landmark.y * h)
 
 
 def get_fingertip_position(hand_landmarks, frame_shape=None, finger=INDEX_FINGER_TIP):
-    """
-    Return the position of a fingertip (index finger by default).
-
-    If frame_shape is given (e.g. frame.shape from cv2), returns pixel (x, y) ints.
-    Otherwise returns normalized (x, y) floats in [0, 1].
-    """
     lm = hand_landmarks.landmark[finger]
     if frame_shape is not None:
         return _to_pixel(lm, frame_shape)
@@ -199,12 +184,6 @@ def get_fingertip_position(hand_landmarks, frame_shape=None, finger=INDEX_FINGER
 
 
 def get_palm_center(hand_landmarks, frame_shape=None):
-    """
-    Approximate the palm center as the average of wrist + middle-finger MCP,
-    which sits roughly in the middle of the palm.
-
-    Returns pixel (x, y) if frame_shape given, else normalized (x, y).
-    """
     wrist = hand_landmarks.landmark[WRIST]
     mcp = hand_landmarks.landmark[MIDDLE_FINGER_MCP]
     cx = (wrist.x + mcp.x) / 2
@@ -217,15 +196,6 @@ def get_palm_center(hand_landmarks, frame_shape=None):
 
 
 def is_fist_closed(hand_landmarks, curl_threshold=0.07):
-    """
-    Return True if the hand looks like a closed fist.
-
-    Heuristic: for each of the four non-thumb fingers, compare the
-    distance from the wrist to the fingertip vs. wrist to that finger's
-    PIP joint. If the tip is not meaningfully farther from the wrist than
-    the PIP joint is, the finger is considered curled. If enough fingers
-    (>=3) are curled, we call it a closed fist.
-    """
     wrist = hand_landmarks.landmark[WRIST]
     curled_count = 0
 
@@ -243,11 +213,6 @@ def is_fist_closed(hand_landmarks, curl_threshold=0.07):
 
 
 def get_pinch_distance(hand_landmarks):
-    """
-    Return the normalized Euclidean distance between thumb tip and index
-    fingertip. Small values (~<0.05-0.07, tune per resolution/use case)
-    mean the fingers are pinched together.
-    """
     thumb = hand_landmarks.landmark[THUMB_TIP]
     index = hand_landmarks.landmark[INDEX_FINGER_TIP]
     return math.hypot(thumb.x - index.x, thumb.y - index.y)

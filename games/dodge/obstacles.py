@@ -27,7 +27,6 @@ _exists_cache = {}
 
 
 def _sprite_exists(path):
-    """Checked once per file."""
     if path not in _exists_cache:
         ok = os.path.exists(resolve(path))
         if not ok:
@@ -73,13 +72,6 @@ def _spawn_edge_and_velocity(frame_w, frame_h, radius, speed, margin):
 
 def spawn_obstacle(frame_w, frame_h, speed, player_xy, homing_chance=0.0, turn_rate=0.0,
                    homing_seconds=0.0, force_homing=False):
-    """
-    speed: pixels per second.
-    player_xy: where the player is now. The spawn point is chosen so the
-    obstacle can't reach the player faster than MIN_REACTION_SECONDS
-    (best of a few tries), so you are never killed by something that
-    appeared on top of you.
-    """
     ui = ui_scale(frame_h)
     margin = int(OBSTACLE_EDGE_MARGIN * ui)
     radius = int(random.choice(OBSTACLE_RADII) * ui)
@@ -116,7 +108,7 @@ def spawn_obstacle(frame_w, frame_h, speed, player_xy, homing_chance=0.0, turn_r
         "homing": homing,
         "turn_rate": turn_rate if homing else 0.0,
         "home_left": homing_seconds if homing else 0.0,
-        "seen": False,   # has it been on screen yet? (only then does it count as dodged)
+        "seen": False,
     }
 
 
@@ -128,14 +120,12 @@ def _steer_toward(obs, target_x, target_y, dt):
         return
     desired_vx = dx / dist * obs["speed"]
     desired_vy = dy / dist * obs["speed"]
-    blend = 1.0 - math.exp(-obs["turn_rate"] * dt)   # frame-rate independent
+    blend = 1.0 - math.exp(-obs["turn_rate"] * dt)
     obs["vx"] += (desired_vx - obs["vx"]) * blend
     obs["vy"] += (desired_vy - obs["vy"]) * blend
 
 
 def update_obstacles(obstacles, frame_w, frame_h, target_x, target_y, dt):
-    """Move obstacles by dt seconds. Returns how many were dodged (left the
-    screen after having been on it)."""
     ui = ui_scale(frame_h)
     margin = OBSTACLE_EDGE_MARGIN * ui * 3
     dodged = 0
@@ -201,7 +191,6 @@ def draw_obstacle(frame, obs, player_z, ui=1.0):
         draw_sprite(frame, path, x, y, scale=round(2 * r / native, 2), angle=obs["angle"],
                     opacity=1.0 if danger else GHOST_OPACITY)
         if chasing:
-            # bright ring only while it can actually hurt you; dim when ghosted
             ring = max(1, int(round((3 if danger else 1) * ui)))
             ring_color = (0, 0, 255) if danger else (70, 70, 170)
             cv2.circle(frame, (x, y), r + int(4 * ui), ring_color, ring, cv2.LINE_AA)
