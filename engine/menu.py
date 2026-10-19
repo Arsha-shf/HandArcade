@@ -125,7 +125,7 @@ def _show_menu_loop(cap, state):
                     return idx
 
         key = cv2.waitKey(1) & 0xFF
-        if key == ord("q"):
+        if key in (ord("q"), ord("Q")):
             return "quit"
         if ord("1") <= key < ord("1") + len(GAMES):
             return key - ord("1")
