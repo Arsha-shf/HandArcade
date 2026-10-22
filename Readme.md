@@ -28,7 +28,7 @@ Every game saves your best score. Rules and scoring are in the
 
 ```bash
 git clone https://github.com/Arsha-shf/HandArcade.git
-cd handarcade
+cd Handarcade
 
 python -m venv venv
 venv\Scripts\activate                   # macOS / Linux: source venv/bin/activate
