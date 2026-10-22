@@ -32,7 +32,7 @@ cd Handarcade
 
 python -m venv venv
 venv\Scripts\activate                   # macOS / Linux: source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
 python download_models.py               # one time: downloads the hand-tracking model
 python generate_placeholder_sounds.py   # optional: creates simple sound effects
